@@ -40,7 +40,10 @@ py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 powershell -ExecutionPolicy Bypass -File .\tools\start_voicevox.ps1
 .\.venv\Scripts\python.exe .\tools\check_env.py
+.\.venv\Scripts\python.exe .\tools\install_dialogue_characters.py
 ```
+
+最後のコマンドは、掛け合い動画で使う既存のずんだもん・四国めたん立ち絵を[配布元](https://nightwork.sakura.ne.jp/ukagaka/shell/Shikokumetan_Zundamon_Shellkit/Shikokumetan_Zundamon_Shellkit.html)から一度だけ取得し、口を閉じた画像と開いた画像をローカル生成します。生成画像はGit管理しません。
 
 新しいPATHが反映されていないシェルでも、補助スクリプトはwingetの標準インストール先を探索します。VOICEVOX APIの既定URLは `http://127.0.0.1:50021` です。別URLは `VOICEVOX_URL`、実行ファイルは `VIDEO_FFMPEG`、`VIDEO_FFPROBE`、`KDENLIVE_PATH`、`MLT_MELT`、`VOICEVOX_ENGINE` で上書きできます。
 
@@ -131,6 +134,8 @@ validatorは、完成動画、`project.json`、必須shot素材、ASS字幕、`a
 静止画は既定では動かしません。必要なshotだけ `motion` に `zoom_in`、`zoom_out`、`pan_left`、`pan_right`、`pan_up`、`pan_down` を指定できます。動きはKdenliveと同じMLT `qtblend` Transformで処理します。実写動画は自動ループせず、素材尺が足りなければ別shotへ切り替えます。
 
 Remotionは図解やオープニングが必要な時だけ使います。
+
+掛け合い動画では、発話中の話者だけを映像上へ表示します。話していない側と発話間の無音では両者とも非表示です。`speaker_key` と `audio/timing.json` の実測時刻で話者を切り替え、各発話WAVの音量を12fpsで解析して閉じ口・開き口を切り替えるため、レンダーごとにLLMを使いません。位置、大きさ、口パク感度、素材パスは `style.json` の `dialogue_characters` で変更できます。
 
 ## Kdenliveで編集する
 

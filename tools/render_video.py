@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import array
 import json
 import math
 import os
+import sys
+import wave
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -349,6 +352,273 @@ def ffmpeg_filter_path(path: Path) -> str:
     return path.resolve().as_posix().replace(":", r"\:").replace("'", r"\'")
 
 
+def dialogue_character_config(project: dict[str, Any], base_style: dict[str, Any]) -> dict[str, Any]:
+    default = base_style.get("dialogue_characters", {})
+    override = project.get("dialogue_characters", {})
+    return {
+        **default,
+        **override,
+        "characters": {
+            **default.get("characters", {}),
+            **override.get("characters", {}),
+        },
+    }
+
+
+def dialogue_characters_enabled(timing: dict[str, Any], config: dict[str, Any]) -> tuple[bool, set[str]]:
+    known_speakers = set(config.get("characters", {}))
+    used_speakers = {
+        str(segment.get("speaker_key", "default"))
+        for segment in timing.get("segments", [])
+        if str(segment.get("speaker_key", "default")) in known_speakers
+    }
+    return bool(config.get("enabled", True)) and len(used_speakers) >= 2, used_speakers
+
+
+def wav_mouth_states(path: Path, mouth_fps: float, rms_threshold: float) -> list[bool]:
+    if mouth_fps <= 0:
+        raise ValueError("dialogue_characters.mouth_fpsは正数にしてください")
+    with wave.open(str(path), "rb") as source:
+        if source.getsampwidth() != 2 or source.getcomptype() != "NONE":
+            raise ValueError(f"口パク解析は16bit PCM WAVに対応しています: {path}")
+        channels = source.getnchannels()
+        sample_rate = source.getframerate()
+        samples = array.array("h")
+        samples.frombytes(source.readframes(source.getnframes()))
+    if sys.byteorder != "little":
+        samples.byteswap()
+
+    chunk_samples = max(channels, round(sample_rate / mouth_fps) * channels)
+    states: list[bool] = []
+    for offset in range(0, len(samples), chunk_samples):
+        chunk = samples[offset : offset + chunk_samples]
+        if not chunk:
+            continue
+        rms = math.sqrt(sum(sample * sample for sample in chunk) / len(chunk)) / 32768
+        states.append(rms >= rms_threshold)
+    return states or [False]
+
+
+def dialogue_character_intervals(
+    project_dir: Path,
+    timing: dict[str, Any],
+    config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    characters = config.get("characters", {})
+    mouth_fps = float(config.get("mouth_fps", 12))
+    threshold = float(config.get("rms_threshold", 0.025))
+    intervals: list[dict[str, Any]] = []
+    for segment in timing.get("segments", []):
+        speaker = str(segment.get("speaker_key", "default"))
+        if speaker not in characters:
+            continue
+        wav_path = project_file(project_dir, segment["wav"])
+        states = wav_mouth_states(wav_path, mouth_fps, threshold)
+        segment_start = float(segment["start"])
+        segment_end = float(segment["end"])
+        for index, is_open in enumerate(states):
+            start = segment_start + index / mouth_fps
+            end = min(segment_end, segment_start + (index + 1) / mouth_fps)
+            if end <= start:
+                continue
+            state = "open" if is_open else "closed"
+            previous = intervals[-1] if intervals else None
+            if (
+                previous
+                and previous["speaker"] == speaker
+                and previous["state"] == state
+                and abs(float(previous["end"]) - start) < 0.000001
+            ):
+                previous["end"] = end
+            else:
+                intervals.append({"speaker": speaker, "state": state, "start": start, "end": end})
+    return intervals
+
+
+def character_asset(project_dir: Path, value: str) -> Path:
+    project_candidate = (project_dir / value).resolve()
+    repo_candidate = (REPO_ROOT / value).resolve()
+    if project_candidate.is_file():
+        return project_candidate
+    if repo_candidate.is_file():
+        return repo_candidate
+    raise FileNotFoundError(
+        f"口パク立ち絵がありません: {value}。tools/install_dialogue_characters.py を実行してください"
+    )
+
+
+def character_state_schedule(
+    intervals: list[dict[str, Any]], total_duration: float
+) -> list[dict[str, Any]]:
+    schedule: list[dict[str, Any]] = []
+
+    def append(state: str, start: float, end: float) -> None:
+        if end <= start:
+            return
+        if schedule and schedule[-1]["state"] == state and abs(float(schedule[-1]["end"]) - start) < 0.000001:
+            schedule[-1]["end"] = end
+        else:
+            schedule.append({"state": state, "start": start, "end": end})
+
+    cursor = 0.0
+    for interval in intervals:
+        start = float(interval["start"])
+        end = float(interval["end"])
+        if start > cursor:
+            append("none", cursor, start)
+        append(f"{interval['speaker']}-{interval['state']}", start, end)
+        cursor = max(cursor, end)
+    if cursor < total_duration:
+        append("none", cursor, total_duration)
+    return schedule
+
+
+def make_character_canvas(
+    ffmpeg: Path,
+    asset: Path | None,
+    output: Path,
+    width: int,
+    height: int,
+    character_height: int,
+    side: str,
+    margin: int,
+    bottom: int,
+) -> None:
+    canvas = f"color=c=black@0.0:s={width}x{height}:d=0.04,format=rgba"
+    command: list[str | Path] = [ffmpeg, "-y", "-f", "lavfi", "-i", canvas]
+    if asset:
+        x = str(margin) if side == "left" else f"main_w-overlay_w-{margin}"
+        y = f"main_h-overlay_h-{bottom}"
+        command += [
+            "-i",
+            asset,
+            "-filter_complex",
+            f"[1:v]scale=-1:{character_height},format=rgba[character];"
+            f"[0:v][character]overlay=x={x}:y={y}:format=auto,format=rgba[out]",
+            "-map",
+            "[out]",
+        ]
+    command += ["-frames:v", "1", "-update", "1", "-c:v", "png", "-pix_fmt", "rgba", output]
+    run(command)
+
+
+def make_character_overlay(
+    ffmpeg: Path,
+    project_dir: Path,
+    config: dict[str, Any],
+    intervals: list[dict[str, Any]],
+    width: int,
+    height: int,
+    total_duration: float,
+) -> Path:
+    work_dir = project_dir / "work" / "dialogue-characters"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    overlay_path = work_dir / "overlay.webm"
+    manifest_path = project_dir / "work" / "character-rendering.json"
+    configured = config.get("characters", {})
+    active_states = {f"{item['speaker']}-{item['state']}" for item in intervals}
+    character_height = max(1, round(height * float(config.get("height_percent", 58.0)) / 100))
+    bottom = max(0, round(height * float(config.get("bottom_percent", 0.0)) / 100))
+    state_specs: dict[str, dict[str, Any]] = {}
+    state_assets: dict[str, Path] = {}
+    for speaker, speaker_config in configured.items():
+        side = str(speaker_config.get("side", "right"))
+        margin = max(0, round(width * float(speaker_config.get("margin_x_percent", 3.5)) / 100))
+        for state in ("closed", "open"):
+            key = f"{speaker}-{state}"
+            if key not in active_states:
+                continue
+            asset = character_asset(project_dir, str(speaker_config[state]))
+            state_assets[key] = asset
+            state_specs[key] = {
+                "path": str(asset),
+                "size": asset.stat().st_size,
+                "mtime_ns": asset.stat().st_mtime_ns,
+                "side": side,
+                "margin": margin,
+            }
+
+    schedule = character_state_schedule(intervals, total_duration)
+    spec = {
+        "renderer_version": 1,
+        "width": width,
+        "height": height,
+        "mouth_fps": float(config.get("mouth_fps", 12)),
+        "character_height": character_height,
+        "bottom": bottom,
+        "states": state_specs,
+        "schedule": schedule,
+    }
+    previous = read_json(manifest_path) if manifest_path.is_file() else {}
+    if overlay_path.is_file() and previous.get("spec") == spec:
+        return overlay_path
+
+    canvases: dict[str, Path] = {"none": work_dir / "none.png"}
+    make_character_canvas(ffmpeg, None, canvases["none"], width, height, character_height, "left", 0, bottom)
+    for key, asset in state_assets.items():
+        state = state_specs[key]
+        canvases[key] = work_dir / f"{key}.png"
+        make_character_canvas(
+            ffmpeg,
+            asset,
+            canvases[key],
+            width,
+            height,
+            character_height,
+            str(state["side"]),
+            int(state["margin"]),
+            bottom,
+        )
+
+    concat_path = work_dir / "schedule.ffconcat"
+    concat_lines = ["ffconcat version 1.0"]
+    for item in schedule:
+        canvas = canvases[str(item["state"])].resolve().as_posix().replace("'", "'\\''")
+        concat_lines += [f"file '{canvas}'", f"duration {float(item['end']) - float(item['start']):.9f}"]
+    last_canvas = canvases[str(schedule[-1]["state"])].resolve().as_posix().replace("'", "'\\''")
+    concat_lines.append(f"file '{last_canvas}'")
+    concat_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
+    run(
+        [
+            ffmpeg,
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            concat_path,
+            "-vf",
+            f"fps={float(config.get('mouth_fps', 12)):g},format=yuva420p",
+            "-t",
+            f"{total_duration:.6f}",
+            "-an",
+            "-c:v",
+            "libvpx-vp9",
+            "-lossless",
+            "1",
+            "-deadline",
+            "good",
+            "-cpu-used",
+            "4",
+            "-row-mt",
+            "1",
+            overlay_path,
+        ]
+    )
+    write_json(
+        manifest_path,
+        {
+            "enabled": True,
+            "show_only_speaking": True,
+            "rms_threshold": float(config.get("rms_threshold", 0.025)),
+            "intervals": intervals,
+            "spec": spec,
+        },
+    )
+    return overlay_path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="FFmpegでシーンを組み、ASS字幕付き動画を作ります")
     parser.add_argument("project_dir", type=Path)
@@ -454,8 +724,10 @@ def main() -> int:
     command: list[str | Path] = [ffmpeg, "-y", "-i", visual_path, "-i", narration_path]
     bgm_value = project.get("bgm")
     bgm_path = project_file(project_dir, bgm_value["path"]) if bgm_value else None
+    next_input = 2
     if bgm_path:
         command += ["-stream_loop", "-1", "-i", bgm_path]
+        next_input = 3
         fade_start = max(0.0, total_duration - 2.0)
         audio_filter = (
             f"[1:a]loudnorm=I={audio_style['narration_lufs']}:LRA=7:TP={audio_style['true_peak_db']}[voice];"
@@ -466,19 +738,49 @@ def main() -> int:
     else:
         audio_filter = f"[1:a]loudnorm=I={audio_style['final_lufs']}:LRA=7:TP={audio_style['true_peak_db']}[aout]"
 
+    character_config = dialogue_character_config(project, base_style)
+    characters_enabled, used_speakers = dialogue_characters_enabled(timing, character_config)
+    character_intervals = (
+        dialogue_character_intervals(project_dir, timing, character_config) if characters_enabled else []
+    )
+    character_overlay: Path | None = None
+    if character_intervals:
+        character_overlay = make_character_overlay(
+            ffmpeg,
+            project_dir,
+            character_config,
+            character_intervals,
+            width,
+            height,
+            total_duration,
+        )
+        command += ["-c:v", "libvpx-vp9", "-i", character_overlay]
+    else:
+        write_json(
+            work_dir / "character-rendering.json",
+            {
+                "enabled": False,
+                "show_only_speaking": True,
+                "speakers": sorted(used_speakers),
+                "intervals": [],
+            },
+        )
+
     filters: list[str] = []
     if not args.no_subtitles:
         filters.append(f"subtitles=filename='{ffmpeg_filter_path(subtitles_path)}'")
     if args.quality == "preview":
         filters.append("scale=1280:720")
     filters.append("format=yuv420p")
+    if character_overlay:
+        video_filter = (
+            f"[0:v][{next_input}:v]overlay=0:0:eof_action=pass:shortest=0[with_character];"
+            f"[with_character]{','.join(filters)}[vout]"
+        )
+        command += ["-filter_complex", audio_filter + ";" + video_filter, "-map", "[vout]"]
+    else:
+        command += ["-filter_complex", audio_filter, "-vf", ",".join(filters), "-map", "0:v:0"]
     command += [
-        "-filter_complex",
-        audio_filter,
-        "-vf",
-        ",".join(filters),
-        "-map",
-        "0:v:0",
         "-map",
         "[aout]",
         "-t",

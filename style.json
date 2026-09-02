@@ -78,6 +78,28 @@
       "max_pan_percent": 1.0
     }
   },
+  "dialogue_characters": {
+    "enabled": true,
+    "show_only_speaking": true,
+    "mouth_fps": 12,
+    "rms_threshold": 0.025,
+    "height_percent": 58.0,
+    "bottom_percent": 0.0,
+    "characters": {
+      "zundamon": {
+        "closed": "assets/dialogue-characters/zundamon-closed.png",
+        "open": "assets/dialogue-characters/zundamon-open.png",
+        "side": "right",
+        "margin_x_percent": 3.5
+      },
+      "metan": {
+        "closed": "assets/dialogue-characters/metan-closed.png",
+        "open": "assets/dialogue-characters/metan-open.png",
+        "side": "left",
+        "margin_x_percent": 3.5
+      }
+    }
+  },
   "delivery": {
     "filename_strategy": "project_title",
     "preserve_resolution": true

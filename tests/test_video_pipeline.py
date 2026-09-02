@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import struct
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+import wave
 from unittest.mock import patch
 
 import opentimelineio as otio
@@ -158,6 +160,73 @@ class RenderCommandTests(unittest.TestCase):
             render_video.visual_filter(1920, 1080, 30),
             "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=30,format=yuv420p",
         )
+
+
+class DialogueCharacterTests(unittest.TestCase):
+    def write_wav(self, path: Path, amplitudes: list[int], *, sample_rate: int = 1200) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(path), "wb") as output:
+            output.setnchannels(1)
+            output.setsampwidth(2)
+            output.setframerate(sample_rate)
+            values: list[int] = []
+            for amplitude in amplitudes:
+                values.extend([amplitude] * 100)
+            output.writeframes(struct.pack(f"<{len(values)}h", *values))
+
+    def test_dialogue_requires_two_configured_speakers(self) -> None:
+        config = {"enabled": True, "characters": {"zundamon": {}, "metan": {}}}
+        enabled, speakers = render_video.dialogue_characters_enabled(
+            {"segments": [{"speaker_key": "zundamon"}, {"speaker_key": "metan"}]},
+            config,
+        )
+        self.assertTrue(enabled)
+        self.assertEqual(speakers, {"zundamon", "metan"})
+        enabled, _ = render_video.dialogue_characters_enabled(
+            {"segments": [{"speaker_key": "zundamon"}]},
+            config,
+        )
+        self.assertFalse(enabled)
+
+    def test_mouth_intervals_follow_wav_and_end_before_hold(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav_path = root / "audio" / "segments" / "line.wav"
+            self.write_wav(wav_path, [0, 10000, 10000, 0])
+            timing = {
+                "segments": [
+                    {
+                        "speaker_key": "zundamon",
+                        "wav": "audio/segments/line.wav",
+                        "start": 1.0,
+                        "end": 4 / 12 + 1.0,
+                        "hold_after": 0.5,
+                    }
+                ]
+            }
+            config = {
+                "mouth_fps": 12,
+                "rms_threshold": 0.025,
+                "characters": {"zundamon": {}},
+            }
+            intervals = render_video.dialogue_character_intervals(root, timing, config)
+            self.assertEqual([item["state"] for item in intervals], ["closed", "open", "closed"])
+            self.assertAlmostEqual(intervals[0]["start"], 1.0)
+            self.assertAlmostEqual(intervals[-1]["end"], 4 / 12 + 1.0)
+            self.assertLess(intervals[-1]["end"], 1.0 + 4 / 12 + 0.5)
+
+    def test_schedule_hides_everyone_between_speakers(self) -> None:
+        intervals = [
+            {"speaker": "zundamon", "state": "closed", "start": 0.0, "end": 0.1},
+            {"speaker": "zundamon", "state": "open", "start": 0.1, "end": 0.2},
+            {"speaker": "metan", "state": "closed", "start": 0.3, "end": 0.4},
+        ]
+        schedule = render_video.character_state_schedule(intervals, 0.5)
+        self.assertEqual(
+            [item["state"] for item in schedule],
+            ["zundamon-closed", "zundamon-open", "none", "metan-closed", "none"],
+        )
+        self.assertEqual(schedule[2], {"state": "none", "start": 0.2, "end": 0.3})
 
     def test_otio_video_clip_does_not_repeat_short_media(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
