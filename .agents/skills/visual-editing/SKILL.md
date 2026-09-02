@@ -1,6 +1,6 @@
 ---
 name: visual-editing
-description: 承認済み動画のshot設計、素材選定、FFmpeg編集、OTIO/Kdenliveタイムライン、字幕、QAに使う。
+description: 承認済み動画のshot設計、素材選定、FFmpeg編集、OTIO/Kdenliveタイムライン、字幕、必要時のQAに使う。
 ---
 
 # Visual Editing
@@ -9,39 +9,36 @@ description: 承認済み動画のshot設計、素材選定、FFmpeg編集、OTI
 
 ## Shot設計
 
-- `scene.shots` を使い、一つのシーン内で必要なだけshotを切り替える。各shotの `visual_intent` は、その画で何を理解させるかを短く書く。
-- `duration_seconds` を省略したshotには、VOICEVOX実測のシーン尺から残りを均等配分する。カット位置を指定する場合は最後のshotを省略して残りを受け持たせる。
-- 実写動画はループしない。`source_start` 以降の素材尺が足りなければ、同じ素材を繰り返さず別shotへ切り替える。
-- 同じ素材の長時間表示、連続使用、過剰な使い回しは、プレビューとコンタクトシートを見て減らす。秒数閾値だけで機械判定しない。
+- `scene.shots` を使い、一つのシーン内で必要なだけshotを切り替える。
+- `duration_seconds` を省略したshotには、VOICEVOX実測のシーン尺から残りを均等配分する。
+- 実写動画はループしない。`source_start` 以降の素材尺が足りなければ別shotへ切り替える。
 
 ```json
 "shots": [
   {
-    "visual_intent": "発表会場で実車の外観を見せる",
     "path": "assets/selected/unveil.mp4",
     "type": "video",
     "source_start": 12.5,
-    "duration_seconds": 4.0,
-    "source_id": "visual-unveil"
+    "duration_seconds": 4.0
   },
   {
-    "visual_intent": "車内の二人乗り設計へ視点を移す",
     "path": "assets/selected/interior.jpg",
     "type": "image",
-    "motion": "none",
-    "source_id": "visual-interior"
+    "motion": "none"
   }
 ]
 ```
 
 ## 素材と編集
 
-- 動画、静止画、図表に固定の優先順位を設けず、内容との一致、資料価値、構図、画質、権利条件で選ぶ。
-- PDF等の文書は通常のB-rollにしない。原文、ページ、図表を見せること自体が説明になる時だけ、必要領域を読みやすく採用して `visual_assets` にページ番号と用途を記録する。
-- 採用素材だけを `assets/selected` 等へ置く。候補画像、PDFページ画像、QA画像、`work` 以下の中間物は再生成可能としてGitへ追加しない。
-- 静止画は固定を基本にし、必要な時だけKdenlive/MLTのTransformを控えめに使う。FFmpeg `zoompan` は使わない。
-- FFmpegでプレビューと最終動画、ASSで同一本文の字幕、OpenTimelineIOで複数clipの映像トラックと分離音声を作る。ネイティブKdenlive成果物は指定時だけKdenlive自身で保存する。
+- 動画、静止画、図表に固定の優先順位を設けず、内容との一致、資料価値、構図、画質で選ぶ。
+- PDF等の文書は、原文、ページ、図表を見せること自体が説明になる時だけ必要な領域を読みやすく採用する。
+- 採用した素材を `assets/selected` 等へ置き、実際に使うパスを `project.json` のshotへ記録する。
+- 個人利用の制作では素材の出典、権利、ライセンス記録を必須にしない。公開、配布、商用利用する場合は用途に合う利用条件を確認する。
+- 静止画は固定を基本にし、必要な時だけKdenlive/MLTの `qtblend` Transformを控えめに使う。FFmpeg `zoompan` は使わない。
+- FFmpegでプレビューと最終動画、ASSで同一本文の字幕、OpenTimelineIOで映像、ナレーション、BGMを分離したタイムラインを作る。Kdenliveネイティブ成果物は明示的な指定がある時だけKdenlive自身で保存する。
+- `work/scene-rendering.json` と `work/scenes` はレンダー内部のキャッシュと再利用管理に使い、納品成果物にはしない。
 
 ## QA
 
-代表フレームとシーンのコンタクトシートを実見し、黒画面、欠損、字幕切れ、読みにくさ、無関係素材、単調さ、不自然なモーション、使い回しを確認する。確認できた問題だけ直し、目標尺のためには編集し直さない。
+映像確認に役立つ場合だけ代表フレームやコンタクトシートを作る。黒画面、欠損、字幕切れ、読みにくさ、内容と合わない素材、不自然なモーションなど、実際に確認できた問題だけ直す。

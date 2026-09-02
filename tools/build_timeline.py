@@ -117,8 +117,6 @@ def main() -> int:
     timeline = otio.schema.Timeline(name=project["title"])
     timeline.metadata["project"] = {
         "schema_version": project.get("schema_version", 1),
-        "project_dir": str(project_dir),
-        "subtitles": relative_media_url(project_dir / "subtitles" / "subtitles.ass", output.parent),
         "still_motion": {
             **style.get("editing", {}).get("still_motion", {}),
             **project.get("editing", {}).get("still_motion", {}),
@@ -144,8 +142,6 @@ def main() -> int:
                 {
                     "scene_id": scene["id"],
                     "shot_index": shot_index,
-                    "source_id": shot.get("source_id", ""),
-                    "visual_intent": shot.get("visual_intent", ""),
                     "motion": shot.get("motion", "none"),
                 },
                 output.parent,
@@ -163,7 +159,7 @@ def main() -> int:
                 0,
                 float(segment["audio_duration"]),
                 fps,
-                {"scene_id": segment["scene_id"], "subtitle": segment["subtitle"]},
+                {"scene_id": segment["scene_id"]},
                 output.parent,
             )
         )

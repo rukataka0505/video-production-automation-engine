@@ -133,7 +133,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         segment_primary = ass_color(speaker_style.get("text_color", style["primary_color"]))
         segment_emphasis = ass_color(speaker_style.get("emphasis_color", style["emphasis_color"]))
         style_name = style_name_by_speaker.get(speaker_key, "Default")
-        text = segment.get("subtitle", segment["text"])
+        text = segment["text"]
         text = wrap_japanese(text, int(style["max_chars_per_line"]), int(style["max_lines"]))
         text = text.replace("{", "｛").replace("}", "｝")
         for word in segment.get("highlight", []):

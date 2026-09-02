@@ -311,8 +311,6 @@ def shot_render_spec(
         "source_size": source.stat().st_size,
         "source_mtime_ns": source.stat().st_mtime_ns,
         "source_start": float(shot.get("source_start", 0)),
-        "source_id": shot.get("source_id", ""),
-        "visual_intent": shot.get("visual_intent", ""),
         "type": "image" if is_image else "video",
         "motion": motion,
         "engine": "mlt_qtblend_transform" if is_image and motion != "none" else "ffmpeg_scale_crop",

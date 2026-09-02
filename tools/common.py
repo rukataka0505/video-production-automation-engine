@@ -177,35 +177,6 @@ def shot_durations(scene: dict[str, Any], scene_duration: float) -> list[float]:
     return [float(value) for value in durations]
 
 
-def source_groups(value: Any) -> dict[str, list[dict[str, Any]]]:
-    """Normalize the current grouped source registry and the legacy flat list."""
-    groups = {"research_sources": [], "visual_assets": [], "audio_assets": []}
-    if isinstance(value, dict):
-        for key in groups:
-            entries = value.get(key, [])
-            if not isinstance(entries, list):
-                raise ValueError(f"sources.jsonの{key}は配列にしてください")
-            groups[key] = entries
-        return groups
-    if not isinstance(value, list):
-        raise ValueError("sources.jsonは分類済みオブジェクトまたは旧形式の配列である必要があります")
-
-    for entry in value:
-        source_type = str(entry.get("type", "")).lower()
-        if source_type in {"image", "video", "graphic", "generated_graphic", "animation", "document_excerpt"}:
-            groups["visual_assets"].append(entry)
-        elif source_type in {"audio", "music", "bgm"}:
-            groups["audio_assets"].append(entry)
-        else:
-            groups["research_sources"].append(entry)
-    return groups
-
-
-def source_entries(value: Any) -> list[dict[str, Any]]:
-    groups = source_groups(value)
-    return groups["research_sources"] + groups["visual_assets"] + groups["audio_assets"]
-
-
 def delivery_filename(project: dict[str, Any]) -> str:
     configured = str(project.get("delivery", {}).get("filename", "")).strip()
     if configured:
@@ -217,8 +188,6 @@ def delivery_filename(project: dict[str, Any]) -> str:
         raise ValueError(f"完成動画のファイル名が不正です: {candidate}")
     if not candidate.lower().endswith(".mp4"):
         raise ValueError(f"完成動画のファイル名は.mp4で終える必要があります: {candidate}")
-    if candidate.lower() == "final.mp4":
-        raise ValueError("完成動画にはfinal.mp4ではなく内容を表すタイトルを付けてください")
     return candidate
 
 

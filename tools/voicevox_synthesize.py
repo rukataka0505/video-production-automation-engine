@@ -90,7 +90,6 @@ def main() -> int:
                     "id": segment_id,
                     "scene_id": scene["id"],
                     "text": segment["text"],
-                    "subtitle": segment["text"],
                     "highlight": segment.get("highlight", []),
                     "speaker": segment_speaker,
                     "speaker_key": speaker_key,
@@ -125,7 +124,7 @@ def main() -> int:
             timing_segments.append(
                 {
                     key: record[key]
-                    for key in ("id", "scene_id", "text", "subtitle", "highlight", "speaker", "speaker_key", "hold_after", "wav", "ffprobe_duration")
+                    for key in ("id", "scene_id", "text", "highlight", "speaker", "speaker_key", "hold_after", "wav", "ffprobe_duration")
                 }
                 | {"start": start, "end": end, "audio_duration": end - start}
             )

@@ -80,8 +80,7 @@
   },
   "delivery": {
     "filename_strategy": "project_title",
-    "preserve_resolution": true,
-    "require_descriptive_filename": true
+    "preserve_resolution": true
   },
   "youtube": {
     "auto_upload": true,
