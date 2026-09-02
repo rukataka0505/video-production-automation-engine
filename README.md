@@ -18,7 +18,7 @@ SpaceXの直近7日間の重要ニュースで動画作って
 量子コンピューターについて、3分の掛け合いの動画を作って
 ```
 
-調査時はWeb記事、動画、画像に加えて、PDF、スライド、報告書、論文、決算資料内の写真・本文・図表・グラフも素材候補として探します。個人利用の案件では権利関係や再利用ライセンスの明確さを採用の必須条件にしませんが、出典は記録し、公開・配布・商用利用時は別途確認します。
+PDF、スライド、報告書、論文、決算資料は主に情報源として調べます。文書や図表そのものを見せる意味がある場合だけ映像素材として採用します。個人利用の案件では権利関係や再利用ライセンスの明確さを採用の必須条件にしませんが、出典は記録し、公開・配布・商用利用時は別途確認します。
 
 ## 必要なソフト
 
@@ -75,11 +75,12 @@ Google CloudでYouTube Data API v3を有効にし、OAuthクライアントの�
 各動画は `projects/<日付>-<slug>/` に保存します。
 
 ```text
-project.json              シーンとナレーションの正本
+project.json              シーン、shot、ナレーション、納品設定の正本
 brief.md                  依頼と狙い
 research.md               事実確認メモ
-sources.json              記事・画像・動画・音源の出典
-assets/                   採用素材
+sources.json              research_sources / visual_assets / audio_assets
+script.md                 必要な場合だけ作るproject.jsonの承認用ビュー
+assets/selected/          採用素材
 audio/segments/           句単位のVOICEVOX音声
 audio/narration.wav       全体ナレーション
 audio/timing.json         ffprobe実測タイミング
@@ -95,6 +96,8 @@ work/scene-rendering.json 各シーンのレンダー方式とキャッシュ検
 qa/                       代表フレームと検証結果
 ```
 
+新規プロジェクトは `scene.visual` ではなく `scene.shots` を使います。各shotに短い `visual_intent` を持たせ、必要なshotだけ `duration_seconds` を指定します。未指定分はVOICEVOXの実測シーン尺から配分されます。
+
 ## 補助コマンド
 
 ```powershell
@@ -108,11 +111,11 @@ qa/                       代表フレームと検証結果
 .\.venv\Scripts\python.exe .\tools\finalize_project.py .\projects\<project>
 ```
 
-`finalize_project.py` は完成条件を再検証し、合格した `output/<動画タイトル>.mp4` だけを変換せずYouTubeへ非公開アップロードします。送信は再開可能なチャンク方式です。完了後はAPIでタイトル、非公開状態、YouTube側の処理完了を再確認して `output/youtube-upload.json` に保存します。同じファイルの再実行は重複アップロードせず、既存のYouTube動画を再確認します。
+`finalize_project.py` は完成条件を再検証し、合格した `output/<動画タイトル>.mp4` だけを変換せずYouTubeへ非公開アップロードします。validatorは目標尺を参考情報として記録し、範囲外だけでは失敗させません。素材欠落、破損、音声・字幕・タイムラインの不整合を失敗条件にします。送信は再開可能なチャンク方式で、再実行時は既存のYouTube動画を再確認します。
 
 Remotionは図解やオープニングが必要な時だけ準備します。
 
-静止画は既定では動かしません。内容上必要なシーンだけ `project.json` の `visual.motion` に `zoom_in`、`zoom_out`、`pan_left`、`pan_right`、`pan_up`、`pan_down` を指定できます。動きはKdenliveと同じMLT `qtblend` Transformで処理し、最大3%のズーム、最大1%のパン、緩やかなイーズイン・アウトを使います。FFmpeg `zoompan` は使用しません。
+静止画は既定では動かしません。内容上必要なshotだけ `motion` に `zoom_in`、`zoom_out`、`pan_left`、`pan_right`、`pan_up`、`pan_down` を指定できます。動きはKdenliveと同じMLT `qtblend` Transformで処理し、FFmpeg `zoompan` は使用しません。実写動画は自動ループせず、素材尺が足りなければ別shotへ切り替えます。
 
 ```powershell
 Set-Location .\remotion
@@ -129,3 +132,13 @@ npm run render -- NewsIntro ..\projects\<project>\graphics\intro.mp4 --props=..\
 ## 公開前の注意
 
 この動画は個人利用を前提として生成されています。Web上から取得した画像・動画・音声等が含まれる可能性があります。YouTube、SNS、Web等で公開・配布・商用利用する場合は、使用素材の著作権・ライセンス・利用条件を確認してください。
+
+## GitHub自動バックアップ
+
+`projects/` はGit管理から完全に除外し、制作システムの変更だけを `origin/main` へ5分ごとに自動保存します。タスクを再登録する場合は次を実行します。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\install_auto_git_backup_task.ps1
+```
+
+実行ログは `%LOCALAPPDATA%\VideoProductionAutomationBackup\backup.log` に保存されます。`projects/` が誤ってGitの追跡対象になった場合や、秘密情報らしいファイル名を検出した場合は、pushせずエラーを記録します。

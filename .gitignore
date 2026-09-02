@@ -9,14 +9,4 @@ __pycache__/
 *.pyc
 remotion/node_modules/
 remotion/.remotion/
-projects/*/work/
-projects/*/output/*.mp4
-projects/*/audio/**/*.wav
-projects/*/audio/**/*.mp3
-projects/*/audio/**/*.m4a
-projects/*/assets/source/
-projects/*/assets/selected/
-projects/*/graphics/*.mp4
-projects/*/graphics/*.png
-projects/*/graphics/*.jpg
-projects/*/qa/
+projects/

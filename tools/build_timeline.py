@@ -8,7 +8,7 @@ from typing import Any
 
 import opentimelineio as otio
 
-from common import REPO_ROOT, ffprobe, media_duration, project_file, read_json
+from common import REPO_ROOT, media_duration, project_file, read_json, scene_shots, shot_durations
 
 
 RIGHTS_WARNING = (
@@ -69,6 +69,8 @@ def visual_clips(
     fps: float,
     metadata: dict[str, Any],
     reference_dir: Path,
+    *,
+    allow_loop: bool = False,
 ) -> list[otio.schema.Clip]:
     if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".svg"}:
         return [external_clip(name, path, 0, duration, fps, metadata, reference_dir)]
@@ -78,6 +80,11 @@ def visual_clips(
         raise ValueError(f"素材の尺が0秒です: {path}")
     if start < 0 or start >= media_length:
         raise ValueError(f"素材の開始位置が範囲外です: {path} start={start} duration={media_length}")
+    if duration > media_length - start + 0.001 and not allow_loop:
+        raise ValueError(
+            f"動画素材の尺がshotに足りません: {path} required={duration:.3f}s "
+            f"available={media_length - start:.3f}s。別shotへ切り替えてください"
+        )
 
     clips: list[otio.schema.Clip] = []
     remaining = duration
@@ -122,18 +129,28 @@ def main() -> int:
     visual_track = otio.schema.Track(name="V1 Visuals", kind=otio.schema.TrackKind.Video)
     scene_times = {scene["id"]: scene for scene in timing["scenes"]}
     for scene in project["scenes"]:
-        visual = scene["visual"]
         scene_timing = scene_times[scene["id"]]
-        clips = visual_clips(
-            scene.get("label", scene["id"]),
-            project_file(project_dir, visual["path"]),
-            float(visual.get("source_start", 0)),
-            float(scene_timing["duration"]),
-            fps,
-            {"scene_id": scene["id"], "source_id": visual.get("source_id", ""), "motion": visual.get("motion", "none")},
-            output.parent,
-        )
-        visual_track.extend(clips)
+        scene_duration = float(scene_timing["duration"])
+        for shot_index, (shot, shot_duration) in enumerate(
+            zip(scene_shots(scene), shot_durations(scene, scene_duration), strict=True),
+            start=1,
+        ):
+            clips = visual_clips(
+                f"{scene.get('label', scene['id'])} / shot {shot_index}",
+                project_file(project_dir, shot["path"]),
+                float(shot.get("source_start", 0)),
+                shot_duration,
+                fps,
+                {
+                    "scene_id": scene["id"],
+                    "shot_index": shot_index,
+                    "source_id": shot.get("source_id", ""),
+                    "visual_intent": shot.get("visual_intent", ""),
+                    "motion": shot.get("motion", "none"),
+                },
+                output.parent,
+            )
+            visual_track.extend(clips)
     timeline.tracks.append(visual_track)
 
     narration_track = otio.schema.Track(name="A1 Narration", kind=otio.schema.TrackKind.Audio)
@@ -166,6 +183,7 @@ def main() -> int:
             fps,
             {"role": "background_music"},
             output.parent,
+            allow_loop=True,
         ):
             bgm_track.append(clip)
         timeline.tracks.append(bgm_track)

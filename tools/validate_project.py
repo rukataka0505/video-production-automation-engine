@@ -3,12 +3,25 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 from urllib.parse import unquote, urlparse
 import xml.etree.ElementTree as ET
 
 import opentimelineio as otio
 
-from common import ffprobe, final_output_path, media_duration, read_json, write_json
+from common import (
+    ffprobe,
+    final_output_path,
+    find_executable,
+    media_duration,
+    read_json,
+    run,
+    scene_shots,
+    shot_durations,
+    source_entries,
+    source_groups,
+    write_json,
+)
 
 
 def resolve_otio_target(target_url: str, timeline_path: Path) -> Path:
@@ -28,8 +41,14 @@ def main() -> int:
     args = parser.parse_args()
     project_dir = args.project_dir.resolve()
     project = read_json(project_dir / "project.json")
-    timing = read_json(project_dir / "audio" / "timing.json")
-    sources = read_json(project_dir / "sources.json")
+    timing_path = project_dir / "audio" / "timing.json"
+    sources_path = project_dir / "sources.json"
+    timing = read_json(timing_path) if timing_path.is_file() else {"total_duration": 0, "segments": [], "scenes": []}
+    sources = read_json(sources_path) if sources_path.is_file() else {
+        "research_sources": [],
+        "visual_assets": [],
+        "audio_assets": [],
+    }
     final_path = final_output_path(project_dir, project)
     ass_path = project_dir / "subtitles" / "subtitles.ass"
     otio_path = project_dir / "timeline" / "edit.otio"
@@ -38,10 +57,12 @@ def main() -> int:
     checks: dict[str, object] = {}
     checks["final_filename"] = final_path.name
     errors: list[str] = []
+    warnings: list[str] = []
     for label, path in {
         "final": final_path,
         "subtitles": ass_path,
         "timeline": otio_path,
+        "timing": timing_path,
         "research": project_dir / "research.md",
         "brief": project_dir / "brief.md",
         "sources": project_dir / "sources.json",
@@ -63,7 +84,7 @@ def main() -> int:
         if target_duration:
             checks["duration_in_target_range"] = float(target_duration["min"]) <= duration <= float(target_duration["max"])
             if not checks["duration_in_target_range"]:
-                errors.append("完成動画の尺が指定範囲外です")
+                warnings.append("完成動画の尺は目安範囲外ですが、検証の失敗条件にはしません")
         checks["has_video"] = bool(video_streams)
         checks["has_audio"] = bool(audio_streams)
         if not video_streams or not audio_streams:
@@ -80,15 +101,27 @@ def main() -> int:
             checks["audio_sample_rate"] = int(audio_streams[0].get("sample_rate", 0))
             if checks["audio_sample_rate"] != 48000:
                 errors.append("完成動画の音声サンプルレートが48kHzではありません")
+        ffmpeg = find_executable("ffmpeg")
+        if not ffmpeg:
+            errors.append("完成動画のデコード検査に必要なffmpegが見つかりません")
+        else:
+            try:
+                run([ffmpeg, "-xerror", "-v", "error", "-i", final_path, "-f", "null", "-"], capture=True)
+                checks["full_decode"] = "passed"
+            except Exception as exc:
+                checks["full_decode"] = "failed"
+                errors.append(f"完成動画を最後までデコードできません: {exc}")
 
     if otio_path.is_file():
         timeline = otio.adapters.read_from_file(str(otio_path))
         checks["otio_tracks"] = [track.name for track in timeline.tracks]
         checks["otio_readable"] = True
-        required_tracks = {"V1 Visuals", "A1 Narration", "A2 BGM"}
+        required_tracks = {"V1 Visuals", "A1 Narration"}
+        if project.get("bgm"):
+            required_tracks.add("A2 BGM")
         checks["otio_required_tracks_present"] = required_tracks.issubset(set(checks["otio_tracks"]))
         if not checks["otio_required_tracks_present"]:
-            errors.append("OTIOに映像・ナレーション・BGMの必須トラックが揃っていません")
+            errors.append("OTIOに必要な映像・音声トラックが揃っていません")
         checks["otio_duration"] = timeline.duration().to_seconds()
         checks["otio_duration_matches_timing"] = abs(checks["otio_duration"] - float(timing["total_duration"])) < 0.25
         if not checks["otio_duration_matches_timing"]:
@@ -160,9 +193,10 @@ def main() -> int:
                 node.text or "" for node in native_root.findall(".//property[@name='kdenlive:track_name']")
             }
             checks["native_kdenlive_tracks"] = sorted(native_track_names)
-            checks["native_kdenlive_required_tracks_present"] = {
-                "V1 Visuals", "A1 Narration", "A2 BGM"
-            }.issubset(native_track_names)
+            native_required_tracks = {"V1 Visuals", "A1 Narration"}
+            if project.get("bgm"):
+                native_required_tracks.add("A2 BGM")
+            checks["native_kdenlive_required_tracks_present"] = native_required_tracks.issubset(native_track_names)
             if not checks["native_kdenlive_required_tracks_present"]:
                 errors.append("Kdenliveネイティブプロジェクトに必須トラックが揃っていません")
 
@@ -185,7 +219,9 @@ def main() -> int:
                 errors.append(f"Kdenliveネイティブプロジェクトの参照素材が不足: {', '.join(native_missing_resources)}")
 
             expected_visuals = {
-                (project_dir / Path(scene["visual"]["path"])).resolve() for scene in project.get("scenes", [])
+                (project_dir / Path(shot["path"])).resolve()
+                for scene in project.get("scenes", [])
+                for shot in scene_shots(scene)
             }
             missing_native_visuals = sorted(str(path) for path in expected_visuals - resolved_resources)
             checks["native_kdenlive_missing_scene_visuals"] = missing_native_visuals
@@ -207,31 +243,104 @@ def main() -> int:
             checks["native_kdenlive_parse_error"] = str(exc)
             errors.append(f"Kdenliveネイティブプロジェクトを検証できません: {exc}")
 
-    source_ids = {source.get("id") for source in sources if source.get("id")}
-    used_ids = {scene.get("visual", {}).get("source_id") for scene in project["scenes"] if scene.get("visual", {}).get("source_id")}
-    if project.get("bgm", {}).get("source_id"):
-        used_ids.add(project["bgm"]["source_id"])
-    missing_source_ids = sorted(used_ids - source_ids)
-    checks["source_entries"] = len(sources)
-    checks["missing_source_ids"] = missing_source_ids
-    if missing_source_ids:
-        errors.append(f"出典未登録: {', '.join(missing_source_ids)}")
-    for source in sources:
+    groups = source_groups(sources)
+    entries = source_entries(sources)
+    research_ids = {source.get("id") for source in groups["research_sources"] if source.get("id")}
+    visual_ids = {source.get("id") for source in groups["visual_assets"] if source.get("id")}
+    audio_ids = {source.get("id") for source in groups["audio_assets"] if source.get("id")}
+    used_visual_ids = {
+        shot.get("source_id")
+        for scene in project["scenes"]
+        for shot in scene_shots(scene)
+        if shot.get("source_id")
+    }
+    used_audio_ids = {project["bgm"]["source_id"]} if project.get("bgm", {}).get("source_id") else set()
+    missing_visual_ids = sorted(used_visual_ids - visual_ids)
+    missing_audio_ids = sorted(used_audio_ids - audio_ids)
+    checks["research_source_entries"] = len(research_ids)
+    checks["visual_asset_entries"] = len(visual_ids)
+    checks["audio_asset_entries"] = len(audio_ids)
+    checks["missing_visual_source_ids"] = missing_visual_ids
+    checks["missing_audio_source_ids"] = missing_audio_ids
+    if missing_visual_ids:
+        errors.append(f"visual_assetsに未登録の映像素材: {', '.join(missing_visual_ids)}")
+    if missing_audio_ids:
+        errors.append(f"audio_assetsに未登録の音声素材: {', '.join(missing_audio_ids)}")
+    duplicate_ids = sorted(
+        (research_ids & visual_ids) | (research_ids & audio_ids) | (visual_ids & audio_ids)
+    )
+    checks["duplicate_source_categories"] = duplicate_ids
+    if duplicate_ids:
+        errors.append(f"複数カテゴリに重複した出典ID: {', '.join(duplicate_ids)}")
+    for source in groups["research_sources"]:
         if not source.get("url") or not source.get("provider"):
-            errors.append(f"出典URLまたは提供元が不足: {source.get('id', '(no id)')}")
+            errors.append(f"調査出典のURLまたは提供元が不足: {source.get('id', '(no id)')}")
+    for source in groups["visual_assets"] + groups["audio_assets"]:
+        parent_id = source.get("research_source_id")
+        if parent_id and parent_id not in research_ids:
+            errors.append(f"素材が参照するresearch_source_idが未登録: {source.get('id', '(no id)')} -> {parent_id}")
+        if not parent_id and (not source.get("url") or not source.get("provider")):
+            errors.append(f"素材のURLまたは提供元が不足: {source.get('id', '(no id)')}")
+    for source in entries:
         local_path = source.get("local_path")
         if local_path:
             resolved = project_dir / Path(local_path)
             if not resolved.is_file():
                 errors.append(f"出典登録されたローカル素材が見つかりません: {local_path}")
 
-    cue_count = sum(1 for line in ass_path.read_text(encoding="utf-8-sig").splitlines() if line.startswith("Dialogue:")) if ass_path.is_file() else 0
+    dialogue_lines = (
+        [line for line in ass_path.read_text(encoding="utf-8-sig").splitlines() if line.startswith("Dialogue:")]
+        if ass_path.is_file()
+        else []
+    )
+    cue_count = len(dialogue_lines)
     checks["subtitle_cue_count"] = cue_count
     checks["timing_segment_count"] = len(timing.get("segments", []))
     if cue_count != checks["timing_segment_count"]:
         errors.append("字幕数とVOICEVOX音声セグメント数が一致しません")
+    ass_texts = [
+        re.sub(r"\{[^}]*\}", "", line.split(",", 9)[-1]).replace(r"\N", "").replace("\n", "")
+        for line in dialogue_lines
+    ]
+    timing_texts = [str(segment.get("text", "")).replace("\n", "") for segment in timing.get("segments", [])]
+    checks["ass_text_matches_narration"] = ass_texts == timing_texts
+    if cue_count == checks["timing_segment_count"] and not checks["ass_text_matches_narration"]:
+        errors.append("ASS字幕本文とナレーションが一致しません")
+
+    project_subtitle_mismatches = [
+        segment["id"]
+        for scene in project.get("scenes", [])
+        for segment in scene.get("narration", [])
+        if "subtitle" in segment and segment["subtitle"] != segment["text"]
+    ]
+    timing_subtitle_mismatches = [
+        segment["id"]
+        for segment in timing.get("segments", [])
+        if segment.get("subtitle", segment.get("text")) != segment.get("text")
+    ]
+    checks["project_subtitle_text_mismatches"] = project_subtitle_mismatches
+    checks["timing_subtitle_text_mismatches"] = timing_subtitle_mismatches
+    if project_subtitle_mismatches or timing_subtitle_mismatches:
+        errors.append("ナレーションと字幕本文が一致しません")
 
     timing_scenes = {scene["id"]: scene for scene in timing.get("scenes", [])}
+    shot_schema_errors: list[str] = []
+    for scene in project.get("scenes", []):
+        try:
+            shots = scene_shots(scene)
+            shot_durations(scene, float(timing_scenes[scene["id"]]["duration"]))
+            if "shots" in scene:
+                for index, shot in enumerate(shots, start=1):
+                    if not str(shot.get("visual_intent", "")).strip():
+                        shot_schema_errors.append(f"{scene['id']}[{index}]:visual_intent")
+                    if not str(shot.get("path", "")).strip():
+                        shot_schema_errors.append(f"{scene['id']}[{index}]:path")
+        except (KeyError, TypeError, ValueError) as exc:
+            shot_schema_errors.append(f"{scene.get('id', '(no id)')}:{exc}")
+    checks["shot_schema_errors"] = shot_schema_errors
+    if shot_schema_errors:
+        errors.append(f"shot構成が不正です: {', '.join(shot_schema_errors)}")
+
     work_scene_errors: list[str] = []
     for scene in project.get("scenes", []):
         scene_id = scene["id"]
@@ -239,13 +348,16 @@ def main() -> int:
         if not work_scene.is_file():
             work_scene_errors.append(f"{scene_id}:missing")
             continue
+        if scene_id not in timing_scenes:
+            work_scene_errors.append(f"{scene_id}:timing-missing")
+            continue
         expected = float(timing_scenes[scene_id]["duration"])
         actual = media_duration(work_scene)
         if abs(actual - expected) > 0.075:
             work_scene_errors.append(f"{scene_id}:{actual:.3f}!={expected:.3f}")
     checks["work_scene_duration_errors"] = work_scene_errors
     if work_scene_errors:
-        errors.append(f"中間シーンクリップの尺が不正です: {', '.join(work_scene_errors)}")
+        warnings.append(f"再生成可能な中間シーンクリップを確認できません: {', '.join(work_scene_errors)}")
 
     rendering_manifest_path = project_dir / "work" / "scene-rendering.json"
     checks["scene_rendering_manifest_exists"] = rendering_manifest_path.is_file()
@@ -255,19 +367,21 @@ def main() -> int:
         rendering_scenes = {item.get("scene_id"): item for item in rendering_manifest.get("scenes", [])}
         motion_engine_errors: list[str] = []
         for scene in project.get("scenes", []):
-            visual = scene.get("visual", {})
-            if visual.get("type", "image") != "image" or visual.get("motion", "none") == "none":
-                continue
             rendered = rendering_scenes.get(scene["id"], {})
-            if rendered.get("engine") != "mlt_qtblend_transform":
-                motion_engine_errors.append(scene["id"])
+            rendered_shots = rendered.get("shots", [])
+            for index, shot in enumerate(scene_shots(scene), start=1):
+                if shot.get("type", "image") != "image" or shot.get("motion", "none") == "none":
+                    continue
+                rendered_shot = rendered_shots[index - 1] if index <= len(rendered_shots) else {}
+                if rendered_shot.get("engine") != "mlt_qtblend_transform":
+                    motion_engine_errors.append(f"{scene['id']}[{index}]")
         checks["still_motion_engine_errors"] = motion_engine_errors
         if motion_engine_errors:
-            errors.append(
-                "静止画モーションがMLT Transformでレンダーされていません: " + ", ".join(motion_engine_errors)
+            warnings.append(
+                "中間記録上、静止画モーションをMLT Transformで確認できません: " + ", ".join(motion_engine_errors)
             )
     else:
-        errors.append("中間シーンのレンダー方式記録がありません。全シーンを再レンダーしてください")
+        warnings.append("再生成可能な中間シーンのレンダー方式記録がありません")
 
     qa_frames = sorted(qa_dir.glob("frame-*.png"))
     scene_qa_frames = sorted(qa_dir.glob("scene-*.png"))
@@ -284,6 +398,7 @@ def main() -> int:
         errors.append("全シーンQAのフレームまたはコンタクトシートが不足しています")
     checks["passed"] = not errors
     checks["errors"] = errors
+    checks["warnings"] = warnings
     checks["rights_warning"] = (
         "この動画は個人利用を前提として生成されています。Web上から取得した画像・動画・音声等が含まれる可能性があります。"
         "YouTube、SNS、Web等で公開・配布・商用利用する場合は、使用素材の著作権・ライセンス・利用条件を確認してください。"

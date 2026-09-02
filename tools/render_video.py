@@ -17,6 +17,8 @@ from common import (
     project_file,
     read_json,
     run,
+    scene_shots,
+    shot_durations,
     write_json,
 )
 
@@ -25,7 +27,7 @@ RIGHTS_WARNING = (
     "この動画は個人利用を前提として生成されています。Web上から取得した画像・動画・音声等が含まれる可能性があります。"
     "YouTube、SNS、Web等で公開・配布・商用利用する場合は、使用素材の著作権・ライセンス・利用条件を確認してください。"
 )
-SCENE_RENDERER_VERSION = 2
+SCENE_RENDERER_VERSION = 3
 
 
 def visual_filter(width: int, height: int, fps: int) -> str:
@@ -196,12 +198,29 @@ def make_mlt_still_clip(
     )
 
 
-def make_scene_clip(
+def shot_frame_counts(durations: list[float], scene_duration: float, fps: int) -> list[int]:
+    total_frames = max(1, round(scene_duration * fps))
+    counts: list[int] = []
+    previous_end = 0
+    elapsed = 0.0
+    for index, duration in enumerate(durations):
+        elapsed += duration
+        end = total_frames if index == len(durations) - 1 else round(elapsed * fps)
+        counts.append(end - previous_end)
+        previous_end = end
+    if any(count < 1 for count in counts):
+        raise ValueError("シーン尺に対してshot数が多すぎます")
+    return counts
+
+
+def make_shot_clip(
     ffmpeg: Path,
     melt: Path | None,
     project_dir: Path,
-    scene: dict[str, Any],
-    duration: float,
+    scene_id: str,
+    shot_index: int,
+    shot: dict[str, Any],
+    frames: int,
     output: Path,
     width: int,
     height: int,
@@ -209,13 +228,11 @@ def make_scene_clip(
     mlt_profile: Path,
     still_motion: dict[str, Any],
 ) -> None:
-    visual = scene["visual"]
-    source = project_file(project_dir, visual["path"])
+    source = project_file(project_dir, shot["path"])
     if not source.is_file():
-        raise FileNotFoundError(f"シーン素材がありません: {source}")
-    frames = max(1, round(duration * fps))
-    is_image = visual.get("type", "image") == "image"
-    motion = str(visual.get("motion", "none"))
+        raise FileNotFoundError(f"shot素材がありません: {source}")
+    is_image = shot.get("type", "image") == "image"
+    motion = str(shot.get("motion", "none"))
     if is_image and motion != "none":
         if not melt:
             raise RuntimeError("静止画モーションに必要なMLT meltが見つかりません")
@@ -233,16 +250,27 @@ def make_scene_clip(
         )
         return
     if not is_image and motion != "none":
-        raise ValueError(f"動画素材には静止画モーションを指定できません: {scene['id']} motion={motion}")
+        raise ValueError(f"動画素材には静止画モーションを指定できません: {scene_id}[{shot_index}] motion={motion}")
+
+    source_start = float(shot.get("source_start", 0))
+    if not is_image:
+        source_duration = media_duration(source)
+        requested_duration = frames / fps
+        if source_start < 0 or source_start >= source_duration:
+            raise ValueError(f"動画素材の開始位置が範囲外です: {scene_id}[{shot_index}]")
+        if requested_duration > source_duration - source_start + 1 / fps:
+            raise ValueError(
+                f"動画素材の尺がshotに足りません: {scene_id}[{shot_index}] "
+                f"required={requested_duration:.3f}s available={source_duration - source_start:.3f}s。別shotへ切り替えてください"
+            )
 
     filter_value = visual_filter(width, height, fps)
     command: list[str | Path] = [ffmpeg, "-y"]
     if is_image:
         command += ["-loop", "1", "-i", source]
     else:
-        command += ["-stream_loop", "-1"]
-        if float(visual.get("source_start", 0)) > 0:
-            command += ["-ss", str(visual["source_start"])]
+        if source_start > 0:
+            command += ["-ss", str(source_start)]
         command += ["-i", source]
     command += [
         "-vf",
@@ -265,6 +293,38 @@ def make_scene_clip(
     run(command)
 
 
+def shot_render_spec(
+    project_dir: Path,
+    shot: dict[str, Any],
+    duration: float,
+    frames: int,
+    width: int,
+    height: int,
+    fps: int,
+    still_motion: dict[str, Any],
+) -> dict[str, Any]:
+    source = project_file(project_dir, shot["path"])
+    is_image = shot.get("type", "image") == "image"
+    motion = str(shot.get("motion", "none"))
+    return {
+        "source": shot["path"],
+        "source_size": source.stat().st_size,
+        "source_mtime_ns": source.stat().st_mtime_ns,
+        "source_start": float(shot.get("source_start", 0)),
+        "source_id": shot.get("source_id", ""),
+        "visual_intent": shot.get("visual_intent", ""),
+        "type": "image" if is_image else "video",
+        "motion": motion,
+        "engine": "mlt_qtblend_transform" if is_image and motion != "none" else "ffmpeg_scale_crop",
+        "duration": round(duration, 6),
+        "frames": frames,
+        "width": width,
+        "height": height,
+        "fps": fps,
+        "still_motion": still_motion if is_image and motion != "none" else None,
+    }
+
+
 def scene_render_spec(
     project_dir: Path,
     scene: dict[str, Any],
@@ -274,23 +334,16 @@ def scene_render_spec(
     fps: int,
     still_motion: dict[str, Any],
 ) -> dict[str, Any]:
-    visual = scene["visual"]
-    source = project_file(project_dir, visual["path"])
-    is_image = visual.get("type", "image") == "image"
-    motion = str(visual.get("motion", "none"))
+    shots = scene_shots(scene)
+    durations = shot_durations(scene, duration)
+    frames = shot_frame_counts(durations, duration, fps)
     return {
         "scene_id": scene["id"],
-        "source": visual["path"],
-        "source_size": source.stat().st_size,
-        "source_mtime_ns": source.stat().st_mtime_ns,
-        "type": "image" if is_image else "video",
-        "motion": motion,
-        "engine": "mlt_qtblend_transform" if is_image and motion != "none" else "ffmpeg_scale_crop",
         "duration": round(duration, 6),
-        "width": width,
-        "height": height,
-        "fps": fps,
-        "still_motion": still_motion if is_image and motion != "none" else None,
+        "shots": [
+            shot_render_spec(project_dir, shot, shot_duration, shot_frames, width, height, fps, still_motion)
+            for shot, shot_duration, shot_frames in zip(shots, durations, frames, strict=True)
+        ],
     }
 
 
@@ -324,8 +377,10 @@ def main() -> int:
 
     work_dir = project_dir / "work"
     scene_dir = work_dir / "scenes"
+    shot_dir = work_dir / "shots"
     output_dir = project_dir / "output"
     scene_dir.mkdir(parents=True, exist_ok=True)
+    shot_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     mlt_profile = work_dir / "mlt-profile"
     write_mlt_profile(mlt_profile, width, height, fps)
@@ -345,19 +400,35 @@ def main() -> int:
         spec = scene_render_spec(project_dir, scene, duration, width, height, fps, still_motion)
         output = scene_dir / f"{scene['id']}.mp4"
         if not args.reuse_scenes or not output.exists() or previous_specs.get(scene["id"]) != spec:
-            make_scene_clip(
-                ffmpeg,
-                melt,
-                project_dir,
-                scene,
-                duration,
-                output,
-                width,
-                height,
-                fps,
-                mlt_profile,
-                still_motion,
-            )
+            shot_clips: list[Path] = []
+            for shot_index, (shot, shot_spec) in enumerate(
+                zip(scene_shots(scene), spec["shots"], strict=True),
+                start=1,
+            ):
+                shot_output = shot_dir / f"{scene['id']}-{shot_index:02d}.mp4"
+                make_shot_clip(
+                    ffmpeg,
+                    melt,
+                    project_dir,
+                    scene["id"],
+                    shot_index,
+                    shot,
+                    int(shot_spec["frames"]),
+                    shot_output,
+                    width,
+                    height,
+                    fps,
+                    mlt_profile,
+                    still_motion,
+                )
+                shot_clips.append(shot_output)
+            shot_concat = shot_dir / f"{scene['id']}.ffconcat"
+            shot_concat_lines = ["ffconcat version 1.0"]
+            for shot_clip in shot_clips:
+                escaped = shot_clip.resolve().as_posix().replace("'", "'\\''")
+                shot_concat_lines.append(f"file '{escaped}'")
+            shot_concat.write_text("\n".join(shot_concat_lines) + "\n", encoding="utf-8")
+            run([ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", shot_concat, "-c", "copy", output])
         scene_clips.append(output)
         scene_specs.append(spec)
 

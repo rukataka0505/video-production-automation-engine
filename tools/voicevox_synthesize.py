@@ -90,7 +90,7 @@ def main() -> int:
                     "id": segment_id,
                     "scene_id": scene["id"],
                     "text": segment["text"],
-                    "subtitle": segment.get("subtitle", segment["text"]),
+                    "subtitle": segment["text"],
                     "highlight": segment.get("highlight", []),
                     "speaker": segment_speaker,
                     "speaker_key": speaker_key,

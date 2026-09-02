@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import re
 
 from common import REPO_ROOT, read_json
 
@@ -22,20 +23,53 @@ def ass_time(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{whole_seconds:02d}.{cs:02d}"
 
 
+PROTECTED_WORD = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+:/-]*|[ァ-ヺー]+")
+NO_LINE_START = set("、。，．。！？!?：:；;）］｝〉》」』】〕〗〙〛ー〜～…‥ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ")
+NO_LINE_END = set("（［｛〈《「『【〔〖〘〚")
+PREFERRED_END = set("、。！？!?：:；; ")
+PARTICLES = set("はがをにへとでのもやからまでよりねよぞな")
+
+
 def wrap_japanese(text: str, width: int, max_lines: int) -> str:
-    text = text.strip().replace("\n", "")
-    if len(text) <= width:
+    text = text.replace("\n", "")
+    if len(text) <= width or max_lines <= 1:
         return text
+
+    protected_breaks: set[int] = set()
+    for match in PROTECTED_WORD.finditer(text):
+        protected_breaks.update(range(match.start() + 1, match.end()))
+
+    def allowed(index: int) -> bool:
+        return (
+            0 < index < len(text)
+            and index not in protected_breaks
+            and text[index] not in NO_LINE_START
+            and text[index - 1] not in NO_LINE_END
+        )
+
     lines: list[str] = []
-    remaining = text
-    punctuation = "、。！？!?：: "
-    while remaining and len(lines) < max_lines - 1:
-        target = min(width, len(remaining))
-        break_at = next((index for index in range(target, max(8, target - 7), -1) if remaining[index - 1] in punctuation), target)
-        lines.append(remaining[:break_at].strip())
-        remaining = remaining[break_at:].strip()
-    if remaining:
-        lines.append(remaining)
+    start = 0
+    while len(lines) < max_lines - 1 and len(text) - start > width:
+        lines_left = max_lines - len(lines)
+        target = start + min(width, (len(text) - start + lines_left - 1) // lines_left)
+        candidates = [index for index in range(start + 1, len(text)) if allowed(index)]
+        if not candidates:
+            break
+
+        def score(index: int) -> tuple[float, int]:
+            distance = abs(index - target)
+            if text[index - 1] in PREFERRED_END:
+                distance -= 6
+            elif text[index - 1] in PARTICLES:
+                distance -= 2
+            if index > start + width:
+                distance += (index - start - width) * 3
+            return distance, index
+
+        break_at = min(candidates, key=score)
+        lines.append(text[start:break_at])
+        start = break_at
+    lines.append(text[start:])
     return r"\N".join(lines)
 
 
