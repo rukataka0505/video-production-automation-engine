@@ -16,7 +16,7 @@ SpaceXの直近7日間の重要ニュースで動画作って
 量子コンピューターについて、3分の掛け合いの動画を作って
 ```
 
-Codexは構成、ナレーション、shot、納品設定を `project.json` に保存し、その内容をそのまま承認用に提示します。
+Codexは構成、ナレーション、shot、サムネイル方針、タイトル、納品設定を `project.json` に保存し、その内容をそのまま承認用に提示します。
 
 個人利用の案件では素材の出典、権利、ライセンス記録を制作必須条件にしません。公開、配布、商用利用する場合は用途に合う利用条件を確認してください。
 
@@ -68,6 +68,16 @@ Google CloudでYouTube Data API v3を有効にし、OAuthクライアントの�
 }
 ```
 
+サムネイル方針も `project.json` に保存します。`text` はタイトルと同じ文言にせず、文字を使わない場合は空文字にできます。
+
+```json
+"thumbnail": {
+  "concept": "一目で内容が伝わる構図",
+  "subject": "動画の主役",
+  "text": "短い補完文言"
+}
+```
+
 ## プロジェクト成果物
 
 各動画は `projects/<日付>-<slug>/` に保存します。
@@ -84,7 +94,8 @@ timeline/edit.otio        Kdenliveへ渡す編集タイムライン
 timeline/edit.kdenlive    明示的に要求された場合のネイティブ編集プロジェクト
 output/preview.mp4        プレビュー
 output/<納品ファイル名>.mp4 完成動画
-output/youtube-upload.json YouTube側の動画ID、非公開状態、処理結果
+output/thumbnail.jpg       YouTube用16:9サムネイル
+output/youtube-upload.json YouTube側の動画ID、非公開状態、処理結果、サムネイルAPI結果
 ```
 
 `work/scene-rendering.json` と `work/scenes` はレンダー内部のキャッシュと再利用管理に使います。成果物や完成条件ではありません。
@@ -103,13 +114,19 @@ output/youtube-upload.json YouTube側の動画ID、非公開状態、処理結�
 .\.venv\Scripts\python.exe .\tools\finalize_project.py .\projects\<project>
 ```
 
+完成時は `output/thumbnail.jpg` も検証し、YouTubeへの非公開アップロード後に公式APIで自動設定します。動画本体を変えずにサムネイルだけ変更した時は、既存動画を再アップロードせず次を実行します。
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\upload_youtube.py .\projects\<project> --thumbnail-only
+```
+
 映像確認に役立つ時だけ、次の任意ツールで代表フレームとコンタクトシートを作れます。
 
 ```powershell
 .\.venv\Scripts\python.exe .\tools\extract_qa_frames.py .\projects\<project>\output\preview.mp4
 ```
 
-validatorは、完成動画、`project.json`、必須shot素材、ASS字幕、`audio/timing.json` と参照WAV、OTIOが実際に利用できることを確認します。推奨値、任意メタデータ、QA画像、レンダーキャッシュは検証対象にしません。
+validatorは、完成動画、`project.json`、必須shot素材、ASS字幕、`audio/timing.json` と参照WAV、OTIO、`output/thumbnail.jpg` が実際に利用できることを確認します。推奨値、任意メタデータ、QA画像、レンダーキャッシュは検証対象にしません。
 
 静止画は既定では動かしません。必要なshotだけ `motion` に `zoom_in`、`zoom_out`、`pan_left`、`pan_right`、`pan_up`、`pan_down` を指定できます。動きはKdenliveと同じMLT `qtblend` Transformで処理します。実写動画は自動ループせず、素材尺が足りなければ別shotへ切り替えます。
 

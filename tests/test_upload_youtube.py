@@ -66,6 +66,55 @@ class YouTubeUploadTests(unittest.TestCase):
                 {"youtube": {}},
             )
 
+    def test_set_thumbnail_uses_official_media_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "thumbnail.jpg"
+            path.write_bytes(b"\xff\xd8\xffthumbnail")
+            response = {"kind": "youtube#thumbnailSetResponse", "items": [{"default": {"url": "https://example.test/t.jpg"}}]}
+            with patch.object(
+                youtube,
+                "http_request",
+                return_value=(200, {}, json.dumps(response).encode("utf-8")),
+            ) as request_mock:
+                self.assertEqual(youtube.set_thumbnail("access", "video-id", path), response)
+            method, url = request_mock.call_args.args
+            self.assertEqual(method, "POST")
+            self.assertIn("/youtube/v3/thumbnails/set?", url)
+            self.assertIn("videoId=video-id", url)
+            self.assertIn("uploadType=media", url)
+            self.assertEqual(request_mock.call_args.kwargs["headers"]["Content-Type"], "image/jpeg")
+
+    def test_changed_thumbnail_hash_requires_only_thumbnail_update(self) -> None:
+        manifest = {"thumbnail": {"status": "set", "sha256": "OLD"}}
+        self.assertTrue(youtube.thumbnail_is_current(manifest, "OLD"))
+        self.assertFalse(youtube.thumbnail_is_current(manifest, "NEW"))
+
+    def test_apply_thumbnail_records_official_api_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            output.mkdir()
+            path = output / "thumbnail.jpg"
+            path.write_bytes(b"\xff\xd8\xffnew-thumbnail")
+            response = {"kind": "youtube#thumbnailSetResponse", "items": [{"high": {"url": "https://example.test/high.jpg"}}]}
+            with patch.object(youtube, "set_thumbnail", return_value=response) as set_mock:
+                manifest = youtube.apply_thumbnail("access", "video-id", path, {})
+            set_mock.assert_called_once_with("access", "video-id", path)
+            self.assertEqual(manifest["status"], "uploaded_and_verified")
+            self.assertEqual(manifest["thumbnail"]["status"], "set")
+            self.assertEqual(manifest["thumbnail"]["file"], "output/thumbnail.jpg")
+            self.assertEqual(manifest["thumbnail"]["api_response"], response)
+
+    def test_forced_thumbnail_update_reapplies_same_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "thumbnail.jpg"
+            path.write_bytes(b"\xff\xd8\xffsame-thumbnail")
+            image_hash = youtube.sha256(path)
+            manifest = {"thumbnail": {"status": "set", "sha256": image_hash}}
+            response = {"kind": "youtube#thumbnailSetResponse", "items": [{}]}
+            with patch.object(youtube, "set_thumbnail", return_value=response) as set_mock:
+                youtube.apply_thumbnail("access", "video-id", path, manifest, force=True)
+            set_mock.assert_called_once()
+
     @unittest.skipUnless(os.name == "nt", "Windows DPAPI test")
     def test_refresh_token_is_dpapi_encrypted_and_round_trips(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

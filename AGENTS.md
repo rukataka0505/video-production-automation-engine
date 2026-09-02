@@ -12,12 +12,14 @@
 - ユーザーの尺、対象、口調、素材、字幕指定を優先する。指定尺は構成量の目安として扱い、動画時間が目標と異なっても、それを理由に修正せずそのまま採用して問題ない。尺合わせだけを目的に内容を増減しない。
 - ナレーションと字幕本文は同一にする。改行と表示タイミング上の分割だけを変えてよい。
 - `project.json` を案件固有の構成、シーン、shot、ナレーション、納品設定の正本にする。グローバル既定値は `style.json` に置く。
+- 原則すべての動画で `output/thumbnail.jpg` を作る。動画内容と一致する主役を明確にし、文字量を抑えて小さい表示でも読めるようにする。タイトルと同じ文言は重ねず、組み合わせで興味を作る。
+- サムネイル制作には既存の画像生成・画像処理ツールを組み合わせ、独自の描画・レイアウト基盤は実装しない。
 - 個人利用の制作では素材の出典、権利、ライセンス記録を必須にしない。
 - YouTube納品は常に非公開とし、認証情報やトークンをソース、成果物、ログへ残さない。
 
 ## 承認ゲート
 
-- 構成、ナレーション、字幕・話者・映像方針、納品設定を `project.json` に保存し、その内容をそのままユーザーへ提示する。
+- 構成、ナレーション、字幕・話者・映像方針、サムネイル方針、タイトル、納品設定を `project.json` に保存し、その内容をそのままユーザーへ提示する。
 - 承認前はVOICEVOX音声生成、新規素材の取得、字幕生成、編集、レンダー、納品を始めない。
 - 承認後は保存済みの `project.json` を引き継ぎ、修正指示のある部分だけ更新する。
 
@@ -26,17 +28,17 @@
 1. `projects/<日付>-<slug>/` を作る。最新ニュースで期間指定がなければ、日本時間の依頼日までの直近7日間を対象にする。
 2. 調査が必要な時は `.agents/skills/research/SKILL.md` を読む。
 3. 構成と台本を作る時は `.agents/skills/script/SKILL.md` を読み、`project.json` を作って承認を得る。
-4. 承認後、映像設計と編集を始める時は `.agents/skills/visual-editing/SKILL.md` を読み、shot素材を選定して `project.json` へ反映する。
+4. 承認後、映像設計と編集を始める時は `.agents/skills/visual-editing/SKILL.md` を読み、shot素材を選定して `project.json` へ反映し、承認済み方針から `output/thumbnail.jpg` を作る。
 5. `tools/voicevox_synthesize.py` で音声と `audio/timing.json` を作り、`tools/build_ass.py` で同一本文のASS字幕を作る。
 6. `tools/render_video.py` でプレビューを作る。確認に役立つ場合だけ `tools/extract_qa_frames.py` で代表フレームやコンタクトシートを作り、確認できた問題を直す。
 7. 最終動画を作り、`tools/build_timeline.py` で映像、ナレーション、BGMを分離したOTIOを残す。Kdenliveネイティブプロジェクトは明示的に要求された場合だけKdenlive自身で保存する。
-8. `tools/validate_project.py` で完成動画、`project.json`、必須素材、ASS、音声タイミング、OTIOが実際に利用できることを検証する。
-9. 全体デコード検査済みの完成原本を `tools/finalize_project.py` でYouTubeへ非公開アップロードし、APIで動画ID、非公開状態、処理完了を再確認する。
+8. `tools/validate_project.py` で完成動画、`project.json`、必須素材、ASS、音声タイミング、OTIO、`output/thumbnail.jpg` が実際に利用できることを検証する。
+9. 全体デコード検査済みの完成原本を `tools/finalize_project.py` でYouTubeへ非公開アップロードし、公式APIで動画ID、非公開状態、処理完了を再確認してサムネイルを設定する。動画本体が同じでサムネイルだけ変わった場合は動画を再アップロードせず再設定する。
 
 ## 完了条件
 
 - 正確で自然に視聴でき、映像と内容が合い、後から編集できる完成動画であること。
-- `project.json`、`audio/timing.json` と参照WAV、`subtitles/subtitles.ass`、`timeline/edit.otio`、`output/<納品ファイル名>.mp4`、検証結果、`output/youtube-upload.json` が利用できること。
+- `project.json`、`audio/timing.json` と参照WAV、`subtitles/subtitles.ass`、`timeline/edit.otio`、`output/<納品ファイル名>.mp4`、`output/thumbnail.jpg`、検証結果、サムネイルAPI結果を含む `output/youtube-upload.json` が利用できること。
 - Kdenliveネイティブプロジェクトを明示的に要求された場合だけ `timeline/edit.kdenlive` も必須とする。
 - 完成報告にはローカル原本、確認済み非公開リンク、実尺と次の警告を表示する。アップロード未完了時は原因と再開方法を示し、完了と扱わない。
 

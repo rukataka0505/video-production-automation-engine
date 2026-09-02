@@ -82,6 +82,12 @@
     "filename_strategy": "project_title",
     "preserve_resolution": true
   },
+  "thumbnail": {
+    "filename": "thumbnail.jpg",
+    "width": 1280,
+    "height": 720,
+    "format": "jpeg"
+  },
   "youtube": {
     "auto_upload": true,
     "privacy_status": "private",

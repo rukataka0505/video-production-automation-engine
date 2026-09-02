@@ -25,6 +25,7 @@ DEVICE_CODE_URL = "https://oauth2.googleapis.com/device/code"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
 VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+THUMBNAILS_UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
 YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube"
 DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 PRIVACY_STATUS = "private"
@@ -351,6 +352,71 @@ def sha256(path: Path) -> str:
     return digest.hexdigest().upper()
 
 
+def thumbnail_path(project_dir: Path) -> Path:
+    return project_dir.resolve() / "output" / "thumbnail.jpg"
+
+
+def set_thumbnail(access_token: str, video_id: str, image_path: Path) -> dict[str, Any]:
+    if not image_path.is_file():
+        raise FileNotFoundError(f"サムネイルがありません: {image_path}")
+    if image_path.suffix.lower() not in {".jpg", ".jpeg"}:
+        raise ValueError("YouTubeサムネイルはJPEGにしてください")
+    data = image_path.read_bytes()
+    if not data.startswith(b"\xff\xd8\xff"):
+        raise ValueError(f"サムネイルが有効なJPEGではありません: {image_path}")
+    query = urlencode({"videoId": video_id, "uploadType": "media"})
+    _, _, body = http_request(
+        "POST",
+        f"{THUMBNAILS_UPLOAD_URL}?{query}",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "image/jpeg",
+            "Content-Length": str(len(data)),
+        },
+        data=data,
+        timeout=300,
+        accepted={200},
+    )
+    payload = _decode_json(body)
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list) or not payload["items"]:
+        raise YouTubeError("サムネイル設定の完了応答が不正です", payload=payload)
+    return payload
+
+
+def thumbnail_is_current(manifest: dict[str, Any], image_hash: str) -> bool:
+    thumbnail = manifest.get("thumbnail")
+    return (
+        isinstance(thumbnail, dict)
+        and thumbnail.get("status") == "set"
+        and thumbnail.get("sha256") == image_hash
+    )
+
+
+def apply_thumbnail(
+    access_token: str,
+    video_id: str,
+    image_path: Path,
+    manifest: dict[str, Any],
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    image_hash = sha256(image_path)
+    if not force and thumbnail_is_current(manifest, image_hash):
+        manifest["status"] = "uploaded_and_verified"
+        return manifest
+    response = set_thumbnail(access_token, video_id, image_path)
+    manifest["thumbnail"] = {
+        "status": "set",
+        "file": "output/thumbnail.jpg" if image_path.parent.name == "output" else str(image_path),
+        "size_bytes": image_path.stat().st_size,
+        "sha256": image_hash,
+        "set_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "api_response": response,
+    }
+    manifest["status"] = "uploaded_and_verified"
+    return manifest
+
+
 def build_video_resource(project: dict[str, Any], style: dict[str, Any]) -> dict[str, Any]:
     youtube = project.get("youtube", {})
     defaults = style.get("youtube", {})
@@ -538,7 +604,7 @@ def existing_verified_upload(
     verify_video(video, expected_title)
     manifest.update(
         {
-            "status": "uploaded_and_verified",
+            "status": "video_verified_thumbnail_pending",
             "privacy_status": PRIVACY_STATUS,
             "processing_status": video.get("processingDetails", {}).get("processingStatus", "unknown"),
             "verified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -560,6 +626,11 @@ def main() -> int:
     parser.add_argument("--auth-only", action="store_true", help="Device Flow認証だけを実行")
     parser.add_argument("--force-reauth", action="store_true", help="保存済みrefresh tokenを使わず再認証")
     parser.add_argument("--force-upload", action="store_true", help="同じ動画の確認済み記録があっても再アップロード")
+    parser.add_argument(
+        "--thumbnail-only",
+        action="store_true",
+        help="既存のYouTube動画へoutput/thumbnail.jpgだけを再設定",
+    )
     parser.add_argument("--no-wait-processing", action="store_true", help="YouTube側の処理完了を待たない")
     parser.add_argument("--processing-timeout", type=int, default=1800)
     args = parser.parse_args()
@@ -573,20 +644,49 @@ def main() -> int:
         return 0
     if not args.project_dir:
         parser.error("アップロード時はproject_dirが必要です")
+    if args.thumbnail_only and args.force_upload:
+        parser.error("--thumbnail-onlyと--force-uploadは同時に指定できません")
 
     project_dir = args.project_dir.resolve()
     project = read_json(project_dir / "project.json")
     style = read_json(REPO_ROOT / "style.json")
+    image_path = thumbnail_path(project_dir)
+    if not image_path.is_file():
+        raise FileNotFoundError(f"サムネイルがありません: {image_path}")
+    resource = build_video_resource(project, style)
+    expected_title = str(resource["snippet"]["title"])
+    manifest_path = project_dir / "output" / "youtube-upload.json"
+
+    if args.thumbnail_only:
+        if not manifest_path.is_file():
+            raise RuntimeError("既存動画のyoutube-upload.jsonがないため、サムネイルだけを設定できません")
+        manifest = read_json(manifest_path)
+        video_id = str(manifest.get("video_id", "")).strip()
+        if not video_id:
+            raise RuntimeError("youtube-upload.jsonに既存の動画IDがありません")
+        verified = get_video(access_token, video_id)
+        verify_video(verified, expected_title)
+        manifest.update(
+            {
+                "status": "video_verified_thumbnail_pending",
+                "privacy_status": PRIVACY_STATUS,
+                "processing_status": verified.get("processingDetails", {}).get("processingStatus", "unknown"),
+                "verified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+        )
+        manifest = apply_thumbnail(access_token, video_id, image_path, manifest, force=True)
+        write_json(manifest_path, manifest)
+        print("既存のYouTube動画へサムネイルだけを設定しました。")
+        print(json.dumps(manifest, ensure_ascii=False, indent=2))
+        return 0
+
     validation_path = project_dir / "qa" / "validation.json"
     if not validation_path.is_file() or read_json(validation_path).get("passed") is not True:
         raise RuntimeError("qa/validation.jsonが合格していません。先にvalidate_project.pyを実行してください")
     video_path = final_output_path(project_dir, project)
     if not video_path.is_file():
         raise FileNotFoundError(f"完成動画がありません: {video_path}")
-    resource = build_video_resource(project, style)
-    expected_title = str(resource["snippet"]["title"])
     file_hash = sha256(video_path)
-    manifest_path = project_dir / "output" / "youtube-upload.json"
 
     if not args.force_upload:
         existing = existing_verified_upload(manifest_path, file_hash, access_token, expected_title)
@@ -596,8 +696,13 @@ def main() -> int:
                 verify_video(verified, expected_title)
                 existing["processing_status"] = "succeeded"
                 existing["verified_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                write_json(manifest_path, existing)
-            print("同一ファイルはすでに非公開アップロード済みです。YouTube側を再確認しました。")
+            thumbnail_changed = not thumbnail_is_current(existing, sha256(image_path))
+            existing = apply_thumbnail(access_token, str(existing["video_id"]), image_path, existing)
+            write_json(manifest_path, existing)
+            if thumbnail_changed:
+                print("同一動画を再アップロードせず、変更されたサムネイルだけを設定しました。")
+            else:
+                print("同一動画とサムネイルは設定済みです。YouTube側を再確認しました。")
             print(json.dumps(existing, ensure_ascii=False, indent=2))
             return 0
 
@@ -625,11 +730,13 @@ def main() -> int:
     verify_video(verified, expected_title)
     manifest = {
         **pending_manifest,
-        "status": "uploaded_and_verified",
+        "status": "video_verified_thumbnail_pending",
         "processing_status": verified.get("processingDetails", {}).get("processingStatus", "unknown"),
         "title": verified.get("snippet", {}).get("title"),
         "verified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    write_json(manifest_path, manifest)
+    manifest = apply_thumbnail(access_token, video_id, image_path, manifest)
     write_json(manifest_path, manifest)
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
     return 0

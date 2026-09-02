@@ -206,6 +206,7 @@ class ValidatorTests(unittest.TestCase):
     def make_project(self, root: Path) -> tuple[dict[str, object], dict[str, object], otio.schema.Timeline]:
         project = {
             "title": "テスト動画",
+            "thumbnail": {"concept": "テスト構図", "subject": "主役", "text": "要点"},
             "delivery": {"filename": "final.mp4"},
             "video": {
                 "width": 1920,
@@ -253,6 +254,7 @@ class ValidatorTests(unittest.TestCase):
         )
         (root / "timeline" / "edit.otio").write_text("timeline", encoding="utf-8")
         (root / "output" / "final.mp4").write_bytes(b"video")
+        (root / "output" / "thumbnail.jpg").write_bytes(b"\xff\xd8\xffimage")
         return project, timing, make_timeline(root)
 
     def write_project(self, root: Path, project: dict[str, object]) -> None:
@@ -375,6 +377,7 @@ class ValidatorTests(unittest.TestCase):
     def test_missing_required_files_fail(self) -> None:
         for relative, expected in [
             ("output/final.mp4", "完成動画がありません"),
+            ("output/thumbnail.jpg", "サムネイルがありません"),
             ("subtitles/subtitles.ass", "ASS字幕がありません"),
             ("audio/timing.json", "audio/timing.jsonがありません"),
             ("timeline/edit.otio", "OTIOがありません"),
@@ -386,6 +389,28 @@ class ValidatorTests(unittest.TestCase):
                 result = self.run_validator(root, timeline)
                 self.assertFalse(result["passed"])
                 self.assertTrue(any(expected in error for error in result["errors"]))
+
+    def test_thumbnail_must_be_jpeg_and_sixteen_by_nine(self) -> None:
+        with self.subTest("jpeg"), tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, _, timeline = self.make_project(root)
+            (root / "output" / "thumbnail.jpg").write_bytes(b"not-jpeg")
+            result = self.run_validator(root, timeline)
+            self.assertFalse(result["passed"])
+            self.assertTrue(any("有効なJPEG" in error for error in result["errors"]))
+        with self.subTest("aspect"), tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, _, timeline = self.make_project(root)
+            media = {
+                "format": {"duration": "2.0"},
+                "streams": [
+                    {"codec_type": "video", "width": 1920, "height": 1000, "avg_frame_rate": "30/1"},
+                    {"codec_type": "audio", "sample_rate": "44100"},
+                ],
+            }
+            result = self.run_validator(root, timeline, media=media)
+            self.assertFalse(result["passed"])
+            self.assertTrue(any("16:9" in error for error in result["errors"]))
 
     def test_missing_final_stream_and_delivery_mismatch_fail(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

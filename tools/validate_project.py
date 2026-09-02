@@ -29,6 +29,8 @@ from common import (
 TIMING_TOLERANCE = 0.05
 TIMELINE_TOLERANCE = 0.25
 MOTION_VALUES = {"none", "zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down"}
+THUMBNAIL_ASPECT_RATIO = 16 / 9
+THUMBNAIL_ASPECT_TOLERANCE = 0.01
 RIGHTS_WARNING = (
     "この動画は個人利用を前提として生成されています。Web上から取得した画像、動画、音声等が含まれる可能性があります。"
     "YouTube、SNS、Web等で公開、配布、商用利用する場合は、使用素材の著作権、ライセンス、利用条件を確認してください。"
@@ -96,6 +98,23 @@ def project_structure_errors(project: Any) -> list[str]:
         return ["project.jsonのルートはオブジェクトである必要があります"]
     if not str(project.get("title", "")).strip():
         errors.append("project.jsonにtitleがありません")
+
+    thumbnail = project.get("thumbnail")
+    if not isinstance(thumbnail, dict):
+        errors.append("project.jsonのthumbnailが空または不正です")
+    else:
+        for key in ("concept", "subject"):
+            if not isinstance(thumbnail.get(key), str) or not thumbnail[key].strip():
+                errors.append(f"project.jsonのthumbnail.{key}が空または不正です")
+        thumbnail_text = thumbnail.get("text", "")
+        if not isinstance(thumbnail_text, str):
+            errors.append("project.jsonのthumbnail.textは文字列にしてください")
+        youtube = project.get("youtube")
+        youtube_title = youtube.get("title") if isinstance(youtube, dict) else None
+        if thumbnail_text.strip() and normalize_text(thumbnail_text).casefold() == normalize_text(
+            youtube_title or project.get("title", "")
+        ).casefold():
+            errors.append("サムネイル文言とYouTubeタイトルを同じ文言にしないでください")
 
     video = project.get("video", {})
     if video is not None and not isinstance(video, dict):
@@ -556,6 +575,36 @@ def validate_native_kdenlive(project_dir: Path, project: dict[str, Any], checks:
         errors.append(f"Kdenliveネイティブプロジェクトを読み取れません: {exc}")
 
 
+def validate_thumbnail(path: Path, checks: dict[str, object], errors: list[str]) -> None:
+    checks["thumbnail_exists"] = path.is_file()
+    if not path.is_file():
+        errors.append(f"サムネイルがありません: {path}")
+        return
+    try:
+        with path.open("rb") as source:
+            header = source.read(3)
+    except OSError as exc:
+        errors.append(f"サムネイルを読み取れません: {exc}")
+        return
+    checks["thumbnail_is_jpeg"] = header == b"\xff\xd8\xff"
+    if not checks["thumbnail_is_jpeg"]:
+        errors.append("output/thumbnail.jpgが有効なJPEGではありません")
+        return
+    try:
+        info = ffprobe(path)
+        stream = next(item for item in info.get("streams", []) if item.get("codec_type") == "video")
+        width = int(stream["width"])
+        height = int(stream["height"])
+    except Exception as exc:
+        errors.append(f"サムネイル画像を解析できません: {exc}")
+        return
+    checks["thumbnail_dimensions"] = {"width": width, "height": height}
+    if width < 640 or height <= 0:
+        errors.append("サムネイルは幅640px以上にしてください")
+    if height > 0 and abs(width / height - THUMBNAIL_ASPECT_RATIO) > THUMBNAIL_ASPECT_TOLERANCE:
+        errors.append("サムネイルは16:9で作成してください")
+
+
 def finish_result(project_dir: Path, checks: dict[str, object], errors: list[str], warnings: list[str]) -> dict[str, object]:
     result = {
         **checks,
@@ -619,6 +668,7 @@ def validate_project(project_dir: Path) -> dict[str, object]:
     validate_subtitles(project_dir / "subtitles" / "subtitles.ass", project, timing, checks, errors)
     validate_otio(project_dir / "timeline" / "edit.otio", project, timing, checks, errors)
     validate_native_kdenlive(project_dir, project, checks, errors)
+    validate_thumbnail(project_dir / "output" / "thumbnail.jpg", checks, errors)
     return finish_result(project_dir, checks, errors, warnings)
 
 
