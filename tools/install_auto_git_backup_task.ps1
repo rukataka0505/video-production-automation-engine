@@ -20,10 +20,11 @@ $windowsPowerShell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\
 $actionArguments = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$backupScript`" -RepoPath `"$RepoPath`""
 $action = New-ScheduledTaskAction -Execute $windowsPowerShell -Argument $actionArguments
 
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1)
-$trigger.Repetition.Interval = "PT${IntervalMinutes}M"
-$trigger.Repetition.Duration = "P3650D"
-$trigger.Repetition.StopAtDurationEnd = $false
+$trigger = New-ScheduledTaskTrigger `
+    -Once `
+    -At (Get-Date).AddMinutes(1) `
+    -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) `
+    -RepetitionDuration (New-TimeSpan -Days 3650)
 
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
