@@ -29,14 +29,13 @@
 ## 制作フロー
 
 1. `projects/<日付>-<slug>/` を作る。最新ニュースで期間指定がなければ、日本時間の依頼日までの直近7日間を対象にする。
-2. 調査が必要な時は `.agents/skills/research/SKILL.md` を読む。
-3. 構成と台本を作る時は `.agents/skills/script/SKILL.md` を読み、`project.json` を作って承認を得る。
-4. 承認後、映像設計と編集を始める時は `.agents/skills/visual-editing/SKILL.md` を読み、shot素材を選定して `project.json` へ反映し、承認済み方針から `output/thumbnail.jpg` を作る。
-5. `tools/voicevox_synthesize.py` で音声と `audio/timing.json` を作り、`tools/build_ass.py` で同一本文のASS字幕を作る。
-6. `tools/render_job.py` でプレビューを静かに起動して完了だけを確認する。内部の `tools/render_video.py` が既存のFFmpeg/MLT処理とキャッシュ再利用を行う。確認に役立つ場合だけ `tools/extract_qa_frames.py` で代表フレームやコンタクトシートを作り、確認できた問題を直す。
-7. 最終動画を作り、`tools/build_timeline.py` で映像、ナレーション、BGMを分離したOTIOを残す。Kdenliveネイティブプロジェクトは明示的に要求された場合だけKdenlive自身で保存する。
-8. `tools/validate_project.py` で完成動画、`project.json`、必須素材、ASS、音声タイミング、OTIO、`output/thumbnail.jpg` が実際に利用できることを検証する。
-9. 全体デコード検査済みの完成原本を `tools/finalize_project.py` でYouTubeへ非公開アップロードし、公式APIで動画ID、非公開状態、処理完了を再確認してサムネイルを設定する。動画本体が同じでサムネイルだけ変わった場合は動画を再アップロードせず再設定する。
+2. 構成と台本を作る時は `.agents/skills/script/SKILL.md` を読み、`project.json` を作って承認を得る。
+3. 承認後、映像設計と編集を始める時は `.agents/skills/visual-editing/SKILL.md` を読み、shot素材を選定して `project.json` へ反映し、承認済み方針から `output/thumbnail.jpg` を作る。
+4. `tools/voicevox_synthesize.py` で音声と `audio/timing.json` を作り、`tools/build_ass.py` で同一本文のASS字幕を作る。
+5. `tools/render_job.py` でプレビューを静かに起動して完了だけを確認する。内部の `tools/render_video.py` が既存のFFmpeg/MLT処理とキャッシュ再利用を行う。確認に役立つ場合だけ `tools/extract_qa_frames.py` で代表フレームやコンタクトシートを作り、確認できた問題を直す。
+6. 最終動画を作り、`tools/build_timeline.py` で映像、ナレーション、BGMを分離したOTIOを残す。Kdenliveネイティブプロジェクトは明示的に要求された場合だけKdenlive自身で保存する。
+7. `tools/validate_project.py` で完成動画、`project.json`、必須素材、ASS、音声タイミング、OTIO、`output/thumbnail.jpg` が実際に利用できることを検証する。
+8. 全体デコード検査済みの完成原本を `tools/finalize_project.py` でYouTubeへ非公開アップロードし、公式APIで動画ID、非公開状態、処理完了を再確認してサムネイルを設定する。動画本体が同じでサムネイルだけ変わった場合は動画を再アップロードせず再設定する。
 
 ## 完了条件
 
