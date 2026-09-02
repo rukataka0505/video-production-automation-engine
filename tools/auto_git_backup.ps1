@@ -23,11 +23,9 @@ function Write-BackupLog {
 }
 
 function Invoke-Git {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-
-    $output = & git -C $RepoPath @Arguments 2>&1
+    $output = & git -C $RepoPath @args 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "git $($Arguments -join ' ') failed: $($output -join [Environment]::NewLine)"
+        throw "git $($args -join ' ') failed: $($output -join [Environment]::NewLine)"
     }
     return $output
 }
