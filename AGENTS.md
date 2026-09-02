@@ -18,14 +18,13 @@
 ## 承認ゲート
 
 - 構成、ナレーション、字幕・話者・映像方針、納品設定を `project.json` に保存し、その内容をそのままユーザーへ提示する。
-- `research.md` は調査内容の整理に役立つ場合だけ作る。
 - 承認前はVOICEVOX音声生成、新規素材の取得、字幕生成、編集、レンダー、納品を始めない。
 - 承認後は保存済みの `project.json` を引き継ぎ、修正指示のある部分だけ更新する。
 
 ## 制作フロー
 
 1. `projects/<日付>-<slug>/` を作る。最新ニュースで期間指定がなければ、日本時間の依頼日までの直近7日間を対象にする。
-2. 調査が必要な時は `.agents/skills/research/SKILL.md` を読み、必要なら `research.md` を作る。
+2. 調査が必要な時は `.agents/skills/research/SKILL.md` を読む。
 3. 構成と台本を作る時は `.agents/skills/script/SKILL.md` を読み、`project.json` を作って承認を得る。
 4. 承認後、映像設計と編集を始める時は `.agents/skills/visual-editing/SKILL.md` を読み、shot素材を選定して `project.json` へ反映する。
 5. `tools/voicevox_synthesize.py` で音声と `audio/timing.json` を作り、`tools/build_ass.py` で同一本文のASS字幕を作る。

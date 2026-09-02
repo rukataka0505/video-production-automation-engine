@@ -16,7 +16,7 @@ SpaceXの直近7日間の重要ニュースで動画作って
 量子コンピューターについて、3分の掛け合いの動画を作って
 ```
 
-Codexは構成、ナレーション、shot、納品設定を `project.json` に保存し、その内容をそのまま承認用に提示します。調査内容の整理が役立つ場合だけ `research.md` を作ります。
+Codexは構成、ナレーション、shot、納品設定を `project.json` に保存し、その内容をそのまま承認用に提示します。
 
 個人利用の案件では素材の出典、権利、ライセンス記録を制作必須条件にしません。公開、配布、商用利用する場合は用途に合う利用条件を確認してください。
 
@@ -74,7 +74,6 @@ Google CloudでYouTube Data API v3を有効にし、OAuthクライアントの�
 
 ```text
 project.json              構成、シーン、shot、ナレーション、納品設定の正本
-research.md               必要な場合だけ作る調査メモ
 assets/selected/          採用素材
 audio/segments/           句単位のVOICEVOX音声
 audio/narration.wav       全体ナレーション

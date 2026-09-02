@@ -307,7 +307,6 @@ class ValidatorTests(unittest.TestCase):
                 "brief.md",
                 "script.md",
                 "sources.json",
-                "research.md",
                 "qa",
                 "work/scenes",
                 "work/scene-rendering.json",
