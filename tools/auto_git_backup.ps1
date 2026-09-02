@@ -1,9 +1,13 @@
 [CmdletBinding()]
 param(
-    [string]$RepoPath = (Split-Path -Parent $PSScriptRoot)
+    [string]$RepoPath
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($RepoPath)) {
+    $RepoPath = Split-Path -Parent $PSScriptRoot
+}
 
 $logDirectory = Join-Path $env:LOCALAPPDATA "VideoProductionAutomationBackup"
 $logPath = Join-Path $logDirectory "backup.log"

@@ -1,11 +1,15 @@
 [CmdletBinding()]
 param(
-    [string]$RepoPath = (Split-Path -Parent $PSScriptRoot),
+    [string]$RepoPath,
     [ValidateRange(1, 1440)][int]$IntervalMinutes = 5,
     [string]$TaskName = "VideoProductionAutomation-GitBackup"
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($RepoPath)) {
+    $RepoPath = Split-Path -Parent $PSScriptRoot
+}
 
 $backupScript = Join-Path $RepoPath "tools\auto_git_backup.ps1"
 if (-not (Test-Path -LiteralPath $backupScript -PathType Leaf)) {
