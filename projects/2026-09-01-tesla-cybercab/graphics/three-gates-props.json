@@ -1,0 +1,11 @@
+{
+  "kicker": "THREE GATES",
+  "title": "普及を決める3つの関門",
+  "accent": "#E2B46F",
+  "stats": [
+    {"value": "AI", "label": "監視者なしの安全性"},
+    {"value": "法規", "label": "運転装置なしの承認"},
+    {"value": "量産", "label": "低コスト運用と稼働率"}
+  ]
+}
+

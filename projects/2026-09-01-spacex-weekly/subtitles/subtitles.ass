@@ -1,0 +1,27 @@
+﻿[Script Info]
+Title: SpaceX 直近7日間の重要ニュース
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Yu Gothic UI Semibold,58,&H00FFFFFF,&H00FFD442,&H001C1006,&H64000000,-1,0,0,0,100,100,0,0,1,4,1,2,72,72,68,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:06.06,Default,,0,0,0,,この1週間、スペースエックスは、\N{\c&H00FFD442}科学ミッション{\c&H00FFFFFF}と{\c&H00FFD442}スターシップ開発{\c&H00FFFFFF}の両方で大きく動きました。
+Dialogue: 0,0:00:06.18,0:00:11.55,Default,,0,0,0,,{\c&H00FFD442}8月30日{\c&H00FFFFFF}、ファルコンヘビーが、\NNASAの{\c&H00FFD442}ローマン宇宙望遠鏡{\c&H00FFFFFF}を打ち上げました。
+Dialogue: 0,0:00:11.67,0:00:20.23,Default,,0,0,0,,{\c&H00FFD442}31分後{\c&H00FFFFFF}に分離、160万km先のL2へ
+Dialogue: 0,0:00:20.35,0:00:27.98,Default,,0,0,0,,第14回用、{\c&H00FFD442}33基{\c&H00FFFFFF}で静的燃焼試験
+Dialogue: 0,0:00:28.10,0:00:33.96,Default,,0,0,0,,全エンジンを{\c&H00FFD442}本番相当{\c&H00FFFFFF}の時間燃やし、\N次の試験飛行へ向けた{\c&H00FFD442}重要な関門{\c&H00FFFFFF}を通過しました。
+Dialogue: 0,0:00:34.08,0:00:42.09,Default,,0,0,0,,Flight 13の帰還機を回収{\c&H00FFD442}8月27日{\c&H00FFFFFF}\Nに船へ積み込み
+Dialogue: 0,0:00:42.21,0:00:48.72,Default,,0,0,0,,ほぼ無傷の帰還機を直接調べ、{\c&H00FFD442}耐熱タイル{\c&H00FFFFFF}や機\N体構造の改良に使える{\c&H00FFD442}貴重なデータ{\c&H00FFFFFF}を持ち帰ります。
+Dialogue: 0,0:00:48.84,0:00:56.85,Default,,0,0,0,,B1067が{\c&H00FFD442}37回目{\c&H00FFFFFF}の飛行・着陸{\c&H00FFD442}再使用記録{\c&H00FFFFFF}\Nを更新
+Dialogue: 0,0:00:56.97,0:01:03.23,Default,,0,0,0,,スターリンク{\c&H00FFD442}29機{\c&H00FFFFFF}を投入し、2026年のフ\Nァルコン9で{\c&H00FFD442}100回目{\c&H00FFFFFF}の節目とも報じられました。
+Dialogue: 0,0:01:03.35,0:01:08.79,Default,,0,0,0,,さらにルイジアナ州では、総額{\c&H00FFD442}1000億ドル{\c&H00FFFFFF}\N規模の{\c&H00FFD442}新宇宙港計画{\c&H00FFFFFF}が発表されました。
+Dialogue: 0,0:01:08.91,0:01:16.61,Default,,0,0,0,,建設開始は{\c&H00FFD442}2027年{\c&H00FFFFFF}、初打ち上げは早ければ\N{\c&H00FFD442}2029年{\c&H00FFFFFF}。将来は{\c&H00FFD442}年間数千回{\c&H00FFFFFF}を支える構想です。
+Dialogue: 0,0:01:16.73,0:01:21.12,Default,,0,0,0,,{\c&H00FFD442}宇宙科学{\c&H00FFFFFF}を運ぶ現在のロケットと、\N次世代機を磨く{\c&H00FFD442}試験と回収{\c&H00FFFFFF}。
+Dialogue: 0,0:01:21.24,0:01:26.40,Default,,0,0,0,,今週の動きは、スペースエックスが打ち上げ能\N力をさらに広げる姿を示しています。

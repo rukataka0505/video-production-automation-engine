@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "voicevox_engine_version": "0.25.2",
+  "speaker": 30,
+  "sample_rate": 48000,
+  "channels": 1,
+  "total_duration": 79.786667,
+  "segments": [
+    {
+      "id": "01a",
+      "scene_id": "01-hook",
+      "text": "カッパドキアの朝、数十機の気球が奇岩の谷へ浮かびます。でも、予約前に知るべきことがあります。",
+      "subtitle": "カッパドキアの朝、数十機の気球が奇岩の谷へ浮かびます。でも、予約前に知るべきことがあります。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/01a.wav",
+      "ffprobe_duration": 6.538667,
+      "start": 0.0,
+      "end": 6.538666666666667,
+      "audio_duration": 6.538666666666667
+    },
+    {
+      "id": "02a",
+      "scene_id": "02-early-start",
+      "text": "ツアーは日の出前。季節によっては午前4時ごろに起き、ホテル送迎で受付や軽食へ向かいます。",
+      "subtitle": "ツアーは日の出前。季節によっては午前4時ごろに起き、ホテル送迎で受付や軽食へ向かいます。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/02a.wav",
+      "ffprobe_duration": 6.293333,
+      "start": 6.658666666666667,
+      "end": 12.952,
+      "audio_duration": 6.293333333333333
+    },
+    {
+      "id": "03a",
+      "scene_id": "03-briefing",
+      "text": "離陸場では気球が膨らむ様子を見ながら、安全説明を受けてバスケットへ乗り込みます。",
+      "subtitle": "離陸場では気球が膨らむ様子を見ながら、安全説明を受けてバスケットへ乗り込みます。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/03a.wav",
+      "ffprobe_duration": 5.376,
+      "start": 13.072,
+      "end": 18.448,
+      "audio_duration": 5.376000000000001
+    },
+    {
+      "id": "04a",
+      "scene_id": "04-flight-time",
+      "text": "標準プランの飛行はおよそ1時間。谷すれすれから高い眺望まで、風に乗って静かに進みます。",
+      "subtitle": "標準プランの飛行はおよそ1時間。谷すれすれから高い眺望まで、風に乗って静かに進みます。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/04a.wav",
+      "ffprobe_duration": 6.282667,
+      "start": 18.568,
+      "end": 24.850666666666665,
+      "audio_duration": 6.282666666666664
+    },
+    {
+      "id": "05a",
+      "scene_id": "05-basket-size",
+      "text": "一般的なバスケットは14人から20人ほど。少人数や長時間のプランほど、ゆとりは増えます。",
+      "subtitle": "一般的なバスケットは14人から20人ほど。少人数や長時間のプランほど、ゆとりは増えます。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/05a.wav",
+      "ffprobe_duration": 6.24,
+      "start": 24.970666666666666,
+      "end": 31.21066666666667,
+      "audio_duration": 6.240000000000002
+    },
+    {
+      "id": "06a",
+      "scene_id": "06-flight-control",
+      "text": "ただし運航は、風や視界を見た公式の適否判断と、パイロットの安全判断が最優先です。",
+      "subtitle": "ただし運航は、風や視界を見た公式の適否判断と、パイロットの安全判断が最優先です。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/06a.wav",
+      "ffprobe_duration": 6.325333,
+      "start": 31.330666666666666,
+      "end": 37.656,
+      "audio_duration": 6.325333333333333
+    },
+    {
+      "id": "07a",
+      "scene_id": "07-checklist",
+      "text": "予約では、認可事業者か、飛行時間と人数、送迎、保険、欠航時の振替と返金条件を確認しましょう。",
+      "subtitle": "予約では、認可事業者か、飛行時間と人数、送迎、保険、欠航時の振替と返金条件を確認しましょう。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/07a.wav",
+      "ffprobe_duration": 8.330667,
+      "start": 37.776,
+      "end": 46.10666666666667,
+      "audio_duration": 8.330666666666666
+    },
+    {
+      "id": "08a",
+      "scene_id": "08-first-morning",
+      "text": "いちばん大事なコツは、滞在最初の朝に予約すること。欠航でも次の朝へ振り替える余地が残ります。",
+      "subtitle": "いちばん大事なコツは、滞在最初の朝に予約すること。欠航でも次の朝へ振り替える余地が残ります。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/08a.wav",
+      "ffprobe_duration": 6.56,
+      "start": 46.22666666666667,
+      "end": 52.78666666666667,
+      "audio_duration": 6.560000000000002
+    },
+    {
+      "id": "09a",
+      "scene_id": "09-price",
+      "text": "料金は季節と空席で変わります。最安値だけでなく、人数と飛行時間を同じ条件で比べてください。",
+      "subtitle": "料金は季節と空席で変わります。最安値だけでなく、人数と飛行時間を同じ条件で比べてください。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/09a.wav",
+      "ffprobe_duration": 6.826667,
+      "start": 52.906666666666666,
+      "end": 59.733333333333334,
+      "audio_duration": 6.826666666666668
+    },
+    {
+      "id": "10a",
+      "scene_id": "10-clothing",
+      "text": "服装は、冷え込む夜明けに備えた重ね着と、平らで歩きやすい靴。両手を空けられる荷物が安心です。",
+      "subtitle": "服装は、冷え込む夜明けに備えた重ね着と、平らで歩きやすい靴。両手を空けられる荷物が安心です。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/10a.wav",
+      "ffprobe_duration": 6.976,
+      "start": 59.85333333333333,
+      "end": 66.82933333333334,
+      "audio_duration": 6.976000000000006
+    },
+    {
+      "id": "11a",
+      "scene_id": "11-landing",
+      "text": "着陸前はカメラより指示を優先。教わった姿勢を取り、止まるまで勝手に降りないでください。",
+      "subtitle": "着陸前はカメラより指示を優先。教わった姿勢を取り、止まるまで勝手に降りないでください。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/11a.wav",
+      "ffprobe_duration": 5.898667,
+      "start": 66.94933333333333,
+      "end": 72.848,
+      "audio_duration": 5.898666666666671
+    },
+    {
+      "id": "12a",
+      "scene_id": "12-close",
+      "text": "早起きと天候待ちまで含めて気球ツアー。準備して臨めば、カッパドキアの地形が一枚の地図に変わります。",
+      "subtitle": "早起きと天候待ちまで含めて気球ツアー。準備して臨めば、カッパドキアの地形が一枚の地図に変わります。",
+      "highlight": [],
+      "hold_after": 0.12,
+      "wav": "audio/segments/12a.wav",
+      "ffprobe_duration": 6.698667,
+      "start": 72.968,
+      "end": 79.66666666666667,
+      "audio_duration": 6.698666666666668
+    }
+  ],
+  "scenes": [
+    {
+      "id": "01-hook",
+      "start": 0.0,
+      "end": 6.658666666666667,
+      "duration": 6.658666666666667
+    },
+    {
+      "id": "02-early-start",
+      "start": 6.658666666666667,
+      "end": 13.072,
+      "duration": 6.413333333333332
+    },
+    {
+      "id": "03-briefing",
+      "start": 13.072,
+      "end": 18.568,
+      "duration": 5.496000000000002
+    },
+    {
+      "id": "04-flight-time",
+      "start": 18.568,
+      "end": 24.970666666666666,
+      "duration": 6.402666666666665
+    },
+    {
+      "id": "05-basket-size",
+      "start": 24.970666666666666,
+      "end": 31.33066666666667,
+      "duration": 6.360000000000003
+    },
+    {
+      "id": "06-flight-control",
+      "start": 31.330666666666666,
+      "end": 37.775999999999996,
+      "duration": 6.4453333333333305
+    },
+    {
+      "id": "07-checklist",
+      "start": 37.776,
+      "end": 46.22666666666667,
+      "duration": 8.450666666666663
+    },
+    {
+      "id": "08-first-morning",
+      "start": 46.22666666666667,
+      "end": 52.906666666666666,
+      "duration": 6.68
+    },
+    {
+      "id": "09-price",
+      "start": 52.906666666666666,
+      "end": 59.85333333333333,
+      "duration": 6.946666666666665
+    },
+    {
+      "id": "10-clothing",
+      "start": 59.85333333333333,
+      "end": 66.94933333333334,
+      "duration": 7.096000000000011
+    },
+    {
+      "id": "11-landing",
+      "start": 66.94933333333333,
+      "end": 72.968,
+      "duration": 6.018666666666675
+    },
+    {
+      "id": "12-close",
+      "start": 72.968,
+      "end": 79.78666666666668,
+      "duration": 6.818666666666672
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "kicker": "PURPOSE-BUILT",
+  "title": "運転席を消した設計",
+  "accent": "#E2B46F",
+  "stats": [
+    {"value": "2人", "label": "乗客に割り切った座席"},
+    {"value": "0", "label": "ハンドルとペダル"},
+    {"value": "無線", "label": "人を介さない誘導充電"}
+  ]
+}
+

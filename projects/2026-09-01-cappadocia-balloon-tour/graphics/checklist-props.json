@@ -1,0 +1,10 @@
+{
+  "kicker": "BOOKING CHECK",
+  "title": "予約前に比べる5項目",
+  "accent": "#F2B66D",
+  "stats": [
+    {"value": "認可", "label": "SHGM認可事業者か"},
+    {"value": "内容", "label": "飛行時間・人数・送迎・保険"},
+    {"value": "欠航", "label": "振替と返金の条件"}
+  ]
+}

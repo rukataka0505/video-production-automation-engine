@@ -1,0 +1,11 @@
+{
+  "kicker": "FALCON 9 / STARLINK 10-49",
+  "title": "再使用が支える高頻度運用",
+  "accent": "#42D4FF",
+  "stats": [
+    {"value": "29機", "label": "今回投入したStarlink衛星"},
+    {"value": "37回", "label": "B1067の飛行・着陸回数"},
+    {"value": "100回", "label": "2026年の節目と報道"}
+  ]
+}
+

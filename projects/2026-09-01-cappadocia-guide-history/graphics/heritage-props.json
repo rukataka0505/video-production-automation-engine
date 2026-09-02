@@ -1,0 +1,10 @@
+{
+  "kicker": "WORLD HERITAGE",
+  "title": "自然と文化が重なる場所",
+  "accent": "#76C7B7",
+  "stats": [
+    {"value": "1985", "label": "UNESCO世界複合遺産に登録"},
+    {"value": "4基準", "label": "芸術・歴史・集落・景観を評価"},
+    {"value": "9,883ha", "label": "谷、岩窟群、地下都市を保護"}
+  ]
+}

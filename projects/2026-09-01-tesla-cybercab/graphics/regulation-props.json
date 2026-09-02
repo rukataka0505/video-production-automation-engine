@@ -1,0 +1,11 @@
+{
+  "kicker": "U.S. REGULATION",
+  "title": "ハンドルなしを通す仕組み",
+  "accent": "#E2B46F",
+  "stats": [
+    {"value": "2,500台", "label": "Part 555免除の年間上限"},
+    {"value": "2026.6", "label": "ペダル要件の改定を開始"},
+    {"value": "維持", "label": "停止距離などの性能基準"}
+  ]
+}
+
