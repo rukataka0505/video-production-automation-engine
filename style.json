@@ -84,7 +84,7 @@
     "mouth_fps": 12,
     "rms_threshold": 0.025,
     "height_percent": 58.0,
-    "bottom_percent": 0.0,
+    "bottom_percent": -9.2592592593,
     "characters": {
       "zundamon": {
         "closed": "assets/dialogue-characters/zundamon-closed.png",

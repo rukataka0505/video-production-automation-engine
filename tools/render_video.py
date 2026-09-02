@@ -518,7 +518,7 @@ def make_character_overlay(
     configured = config.get("characters", {})
     active_states = {f"{item['speaker']}-{item['state']}" for item in intervals}
     character_height = max(1, round(height * float(config.get("height_percent", 58.0)) / 100))
-    bottom = max(0, round(height * float(config.get("bottom_percent", 0.0)) / 100))
+    bottom = round(height * float(config.get("bottom_percent", 0.0)) / 100)
     state_specs: dict[str, dict[str, Any]] = {}
     state_assets: dict[str, Path] = {}
     for speaker, speaker_config in configured.items():
