@@ -31,6 +31,35 @@ RIGHTS_WARNING = (
     "YouTube、SNS、Web等で公開・配布・商用利用する場合は、使用素材の著作権・ライセンス・利用条件を確認してください。"
 )
 SCENE_RENDERER_VERSION = 3
+OUTPUT_RENDERER_VERSION = 1
+
+
+def quiet_ffmpeg(ffmpeg: Path) -> list[str | Path]:
+    """Keep FFmpeg progress off the controlling terminal without changing encoding."""
+    return [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostats"]
+
+
+def file_signature(path: Path) -> dict[str, int]:
+    stat = path.stat()
+    return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+
+
+def output_render_matches(entry: dict[str, Any], spec: dict[str, Any], output: Path) -> bool:
+    return (
+        output.is_file()
+        and entry.get("spec") == spec
+        and entry.get("output") == file_signature(output)
+    )
+
+
+def scene_needs_render(force: bool, output: Path, previous_spec: dict[str, Any] | None, spec: dict[str, Any]) -> bool:
+    return force or not output.is_file() or previous_spec != spec
+
+
+def emit_render_result(result: dict[str, Any], result_file: Path | None) -> None:
+    if result_file:
+        write_json(result_file, result)
+    print(json.dumps(result, ensure_ascii=False))
 
 
 def visual_filter(width: int, height: int, fps: int) -> str:
@@ -268,7 +297,7 @@ def make_shot_clip(
             )
 
     filter_value = visual_filter(width, height, fps)
-    command: list[str | Path] = [ffmpeg, "-y"]
+    command: list[str | Path] = [*quiet_ffmpeg(ffmpeg), "-y"]
     if is_image:
         command += ["-loop", "1", "-i", source]
     else:
@@ -485,7 +514,7 @@ def make_character_canvas(
     bottom: int,
 ) -> None:
     canvas = f"color=c=black@0.0:s={width}x{height}:d=0.04,format=rgba"
-    command: list[str | Path] = [ffmpeg, "-y", "-f", "lavfi", "-i", canvas]
+    command: list[str | Path] = [*quiet_ffmpeg(ffmpeg), "-y", "-f", "lavfi", "-i", canvas]
     if asset:
         x = str(margin) if side == "left" else f"main_w-overlay_w-{margin}"
         y = f"main_h-overlay_h-{bottom}"
@@ -580,7 +609,7 @@ def make_character_overlay(
     concat_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
     run(
         [
-            ffmpeg,
+            *quiet_ffmpeg(ffmpeg),
             "-y",
             "-f",
             "concat",
@@ -623,8 +652,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="FFmpegでシーンを組み、ASS字幕付き動画を作ります")
     parser.add_argument("project_dir", type=Path)
     parser.add_argument("--quality", choices=("preview", "final"), default="preview")
-    parser.add_argument("--reuse-scenes", action="store_true", help="既存の中間シーンクリップを明示的に再利用します")
+    parser.add_argument("--reuse-scenes", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--force", action="store_true", help="入力が同じでも全シーンと出力を再レンダーします")
     parser.add_argument("--no-subtitles", action="store_true")
+    parser.add_argument("--result-file", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     ffmpeg = find_executable("ffmpeg")
@@ -667,7 +698,7 @@ def main() -> int:
         duration = float(scene_timing["duration"])
         spec = scene_render_spec(project_dir, scene, duration, width, height, fps, still_motion)
         output = scene_dir / f"{scene['id']}.mp4"
-        if not args.reuse_scenes or not output.exists() or previous_specs.get(scene["id"]) != spec:
+        if scene_needs_render(args.force, output, previous_specs.get(scene["id"]), spec):
             shot_clips: list[Path] = []
             for shot_index, (shot, shot_spec) in enumerate(
                 zip(scene_shots(scene), spec["shots"], strict=True),
@@ -696,7 +727,7 @@ def main() -> int:
                 escaped = shot_clip.resolve().as_posix().replace("'", "'\\''")
                 shot_concat_lines.append(f"file '{escaped}'")
             shot_concat.write_text("\n".join(shot_concat_lines) + "\n", encoding="utf-8")
-            run([ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", shot_concat, "-c", "copy", output])
+            run([*quiet_ffmpeg(ffmpeg), "-y", "-f", "concat", "-safe", "0", "-i", shot_concat, "-c", "copy", output])
         scene_clips.append(output)
         scene_specs.append(spec)
 
@@ -708,36 +739,12 @@ def main() -> int:
         },
     )
 
-    concat_file = work_dir / "scenes.ffconcat"
-    concat_lines = ["ffconcat version 1.0"]
-    for clip in scene_clips:
-        escaped = clip.resolve().as_posix().replace("'", "'\\''")
-        concat_lines.append(f"file '{escaped}'")
-    concat_file.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
-    visual_path = work_dir / "visual.mp4"
-    run([ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", concat_file, "-c", "copy", visual_path])
-
     narration_path = project_dir / "audio" / "narration.wav"
     subtitles_path = project_dir / "subtitles" / "subtitles.ass"
     total_duration = float(timing["total_duration"])
     output_path = output_dir / "preview.mp4" if args.quality == "preview" else final_output_path(project_dir, project)
-    command: list[str | Path] = [ffmpeg, "-y", "-i", visual_path, "-i", narration_path]
     bgm_value = project.get("bgm")
     bgm_path = project_file(project_dir, bgm_value["path"]) if bgm_value else None
-    next_input = 2
-    if bgm_path:
-        command += ["-stream_loop", "-1", "-i", bgm_path]
-        next_input = 3
-        fade_start = max(0.0, total_duration - 2.0)
-        audio_filter = (
-            f"[1:a]loudnorm=I={audio_style['narration_lufs']}:LRA=7:TP={audio_style['true_peak_db']}[voice];"
-            f"[2:a]volume={audio_style['bgm_volume']},afade=t=out:st={fade_start:.3f}:d=2[bgm];"
-            f"[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,"
-            f"loudnorm=I={audio_style['final_lufs']}:LRA=7:TP={audio_style['true_peak_db']}[aout]"
-        )
-    else:
-        audio_filter = f"[1:a]loudnorm=I={audio_style['final_lufs']}:LRA=7:TP={audio_style['true_peak_db']}[aout]"
-
     character_config = dialogue_character_config(project, base_style)
     characters_enabled, used_speakers = dialogue_characters_enabled(timing, character_config)
     character_intervals = (
@@ -754,7 +761,6 @@ def main() -> int:
             height,
             total_duration,
         )
-        command += ["-c:v", "libvpx-vp9", "-i", character_overlay]
     else:
         write_json(
             work_dir / "character-rendering.json",
@@ -765,6 +771,64 @@ def main() -> int:
                 "intervals": [],
             },
         )
+
+    render_spec = {
+        "renderer_version": OUTPUT_RENDERER_VERSION,
+        "scene_renderer_version": SCENE_RENDERER_VERSION,
+        "quality": args.quality,
+        "no_subtitles": args.no_subtitles,
+        "width": width,
+        "height": height,
+        "fps": fps,
+        "total_duration": round(total_duration, 6),
+        "video": video,
+        "audio": audio_style,
+        "scenes": scene_specs,
+        "scene_clips": [file_signature(path) for path in scene_clips],
+        "narration": file_signature(narration_path),
+        "subtitles": None if args.no_subtitles else file_signature(subtitles_path),
+        "bgm": file_signature(bgm_path) if bgm_path else None,
+        "character_overlay": file_signature(character_overlay) if character_overlay else None,
+    }
+    output_manifest_path = work_dir / "render-results.json"
+    output_manifest = read_json(output_manifest_path) if output_manifest_path.is_file() else {}
+    previous_result = output_manifest.get("results", {}).get(args.quality, {})
+    if not args.force and output_render_matches(previous_result, render_spec, output_path):
+        result = {
+            "status": "succeeded",
+            "quality": args.quality,
+            "output": str(output_path),
+            "duration": previous_result["duration"],
+            "reused": True,
+        }
+        emit_render_result(result, args.result_file)
+        return 0
+
+    concat_file = work_dir / "scenes.ffconcat"
+    concat_lines = ["ffconcat version 1.0"]
+    for clip in scene_clips:
+        escaped = clip.resolve().as_posix().replace("'", "'\\''")
+        concat_lines.append(f"file '{escaped}'")
+    concat_file.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
+    visual_path = work_dir / "visual.mp4"
+    run([*quiet_ffmpeg(ffmpeg), "-y", "-f", "concat", "-safe", "0", "-i", concat_file, "-c", "copy", visual_path])
+
+    command: list[str | Path] = [*quiet_ffmpeg(ffmpeg), "-y", "-i", visual_path, "-i", narration_path]
+    next_input = 2
+    if bgm_path:
+        command += ["-stream_loop", "-1", "-i", bgm_path]
+        next_input = 3
+        fade_start = max(0.0, total_duration - 2.0)
+        audio_filter = (
+            f"[1:a]loudnorm=I={audio_style['narration_lufs']}:LRA=7:TP={audio_style['true_peak_db']}[voice];"
+            f"[2:a]volume={audio_style['bgm_volume']},afade=t=out:st={fade_start:.3f}:d=2[bgm];"
+            f"[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,"
+            f"loudnorm=I={audio_style['final_lufs']}:LRA=7:TP={audio_style['true_peak_db']}[aout]"
+        )
+    else:
+        audio_filter = f"[1:a]loudnorm=I={audio_style['final_lufs']}:LRA=7:TP={audio_style['true_peak_db']}[aout]"
+    if character_overlay:
+        command += ["-c:v", "libvpx-vp9", "-i", character_overlay]
 
     filters: list[str] = []
     if not args.no_subtitles:
@@ -806,12 +870,27 @@ def main() -> int:
         output_path,
     ]
     run(command)
-    print(
-        json.dumps(
-            {"output": str(output_path), "duration": media_duration(output_path), "rights_warning": RIGHTS_WARNING},
-            ensure_ascii=False,
-            indent=2,
-        )
+    duration = media_duration(output_path)
+    results = output_manifest.get("results", {})
+    results[args.quality] = {
+        "spec": render_spec,
+        "output": file_signature(output_path),
+        "duration": duration,
+    }
+    write_json(
+        output_manifest_path,
+        {"renderer_version": OUTPUT_RENDERER_VERSION, "results": results},
+    )
+    emit_render_result(
+        {
+            "status": "succeeded",
+            "quality": args.quality,
+            "output": str(output_path),
+            "duration": duration,
+            "reused": False,
+            "rights_warning": RIGHTS_WARNING,
+        },
+        args.result_file,
     )
     return 0
 

@@ -18,6 +18,7 @@ sys.path.insert(0, str(TOOLS_DIR))
 
 import build_ass
 import build_timeline
+import render_job
 import render_video
 import validate_project
 from common import delivery_filename, scene_shots, shot_durations
@@ -54,6 +55,55 @@ class SubtitleWrappingTests(unittest.TestCase):
 
 
 class RenderCommandTests(unittest.TestCase):
+    def test_ffmpeg_progress_is_suppressed_without_changing_encoder_options(self) -> None:
+        self.assertEqual(
+            [str(value) for value in render_video.quiet_ffmpeg(Path("ffmpeg"))],
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostats"],
+        )
+
+    def test_unchanged_scene_is_reused_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "scene.mp4"
+            output.write_bytes(b"scene")
+            spec = {"scene_id": "scene-1", "duration": 2.0}
+            self.assertFalse(render_video.scene_needs_render(False, output, spec, spec))
+            self.assertTrue(render_video.scene_needs_render(True, output, spec, spec))
+            self.assertTrue(render_video.scene_needs_render(False, output, spec, {**spec, "duration": 3.0}))
+
+    def test_unchanged_output_signature_is_reused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "preview.mp4"
+            output.write_bytes(b"video")
+            spec = {"quality": "preview", "renderer_version": 1}
+            entry = {"spec": spec, "output": render_video.file_signature(output), "duration": 2.0}
+            self.assertTrue(render_video.output_render_matches(entry, spec, output))
+            output.write_bytes(b"changed")
+            self.assertFalse(render_video.output_render_matches(entry, spec, output))
+
+    def test_render_job_status_hides_pid_and_internal_error(self) -> None:
+        compact = render_job.compact_state(
+            {
+                "status": "failed",
+                "quality": "final",
+                "pid": 123,
+                "error": "large internal detail",
+                "log": "render.log",
+            }
+        )
+        self.assertEqual(compact, {"status": "failed", "quality": "final", "log": "render.log"})
+
+    def test_render_job_start_does_not_launch_duplicate_worker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project_dir = Path(directory)
+            (project_dir / "project.json").write_text("{}", encoding="utf-8")
+            with patch.object(render_job.subprocess, "Popen") as popen_mock, patch("builtins.print"):
+                render_job.start_job(project_dir, "preview", False, False)
+                render_job.start_job(project_dir, "preview", False, False)
+            popen_mock.assert_called_once()
+            command = popen_mock.call_args.args[0]
+            self.assertIn("_worker", command)
+            self.assertIn("preview", command)
+
     def test_video_shot_is_trimmed_without_stream_loop(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             project_dir = Path(directory)

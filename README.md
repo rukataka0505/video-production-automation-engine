@@ -101,7 +101,7 @@ output/thumbnail.jpg       YouTube用16:9サムネイル
 output/youtube-upload.json YouTube側の動画ID、非公開状態、処理結果、サムネイルAPI結果
 ```
 
-`work/scene-rendering.json` と `work/scenes` はレンダー内部のキャッシュと再利用管理に使います。成果物や完成条件ではありません。
+`work/scene-rendering.json`、`work/scenes`、`work/render-results.json` はレンダー内部のキャッシュと再利用管理に使います。成果物や完成条件ではありません。同じ入力のシーンと完成出力は自動的に再利用されます。
 
 各sceneは `shots` を持ち、各shotに `path` と `type`、必要に応じて `source_start`、`duration_seconds`、`motion` を指定します。未指定のshot尺はVOICEVOXの実測シーン尺から配分されます。案件固有値は `project.json`、字幕、音声、映像、編集のグローバル既定値は `style.json` に置きます。
 
@@ -110,12 +110,16 @@ output/youtube-upload.json YouTube側の動画ID、非公開状態、処理結�
 ```powershell
 .\.venv\Scripts\python.exe .\tools\voicevox_synthesize.py .\projects\<project>
 .\.venv\Scripts\python.exe .\tools\build_ass.py .\projects\<project>
-.\.venv\Scripts\python.exe .\tools\render_video.py .\projects\<project> --quality preview
+.\.venv\Scripts\python.exe .\tools\render_job.py start .\projects\<project> --quality preview
+.\.venv\Scripts\python.exe .\tools\render_job.py wait .\projects\<project> --quality preview --timeout 55
 .\.venv\Scripts\python.exe .\tools\build_timeline.py .\projects\<project>
-.\.venv\Scripts\python.exe .\tools\render_video.py .\projects\<project> --quality final
+.\.venv\Scripts\python.exe .\tools\render_job.py start .\projects\<project> --quality final
+.\.venv\Scripts\python.exe .\tools\render_job.py wait .\projects\<project> --quality final --timeout 55
 .\.venv\Scripts\python.exe .\tools\validate_project.py .\projects\<project>
 .\.venv\Scripts\python.exe .\tools\finalize_project.py .\projects\<project>
 ```
+
+`start` はFFmpeg/MLTレンダーをバックグラウンドで開始し、`wait` と `status` は短いJSON状態だけを返します。進捗ログは `work/render-jobs/` に保存されるため、Codexがレンダー中の大量出力を読み続ける必要はありません。`wait` が `running` を返した場合は時間を空けてもう一度確認します。通常はキャッシュを使い、入力が同じなら再レンダーしません。キャッシュ破損など理由がある場合だけ `start` に `--force` を付けます。
 
 完成時は `output/thumbnail.jpg` も検証し、YouTubeへの非公開アップロード後に公式APIで自動設定します。動画本体を変えずにサムネイルだけ変更した時は、既存動画を再アップロードせず次を実行します。
 

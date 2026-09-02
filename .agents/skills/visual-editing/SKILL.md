@@ -37,6 +37,8 @@ description: 承認済み動画のshot設計、素材選定、FFmpeg編集、OTI
 - 静止画は必要に応じてKdenlive/MLTの `qtblend` Transformを使う。
 - FFmpegでプレビューと最終動画、ASSで同一本文の字幕、OpenTimelineIOで映像、ナレーション、BGMを分離したタイムラインを作る。Kdenliveネイティブ成果物は明示的な指定がある時だけKdenlive自身で保存する。
 - `work/scene-rendering.json` と `work/scenes` はレンダー内部のキャッシュと再利用管理に使い、納品成果物にはしない。
+- Codexは `tools/render_job.py start` でレンダーをバックグラウンド起動し、`wait` または `status` の短い状態だけを読む。FFmpeg/MLTの進捗ログは読み続けず、失敗時の診断にだけ使う。
+- 同一入力のシーンと完成出力は自動再利用する。再レンダー理由が明確な場合を除き `--force` を使わない。
 
 ## サムネイル
 
