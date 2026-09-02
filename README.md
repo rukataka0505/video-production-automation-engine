@@ -133,12 +133,6 @@ npm run render -- NewsIntro ..\projects\<project>\graphics\intro.mp4 --props=..\
 
 この動画は個人利用を前提として生成されています。Web上から取得した画像・動画・音声等が含まれる可能性があります。YouTube、SNS、Web等で公開・配布・商用利用する場合は、使用素材の著作権・ライセンス・利用条件を確認してください。
 
-## GitHub自動バックアップ
+## GitHubバックアップ
 
-`projects/` はGit管理から完全に除外し、制作システムの変更だけを `origin/main` へ5分ごとに自動保存します。タスクを再登録する場合は次を実行します。
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\install_auto_git_backup_task.ps1
-```
-
-実行ログは `%LOCALAPPDATA%\VideoProductionAutomationBackup\backup.log` に保存されます。`projects/` が誤ってGitの追跡対象になった場合や、秘密情報らしいファイル名を検出した場合は、pushせずエラーを記録します。
+`projects/` はGit管理から完全に除外します。Codexが制作システムを改善したときは、検証後にシステム変更だけを `origin/main` へコミット・pushします。動画制作だけを行ったときはGitHubへpushしません。
