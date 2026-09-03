@@ -33,8 +33,8 @@
         "zundamon": {
           "text_color": "#66E07A",
           "emphasis_color": "#66E07A",
-          "inner_outline_color": "#000000",
-          "outer_outline_color": "#FFFFFF"
+          "inner_outline_color": "#FFFFFF",
+          "outer_outline_color": "#000000"
         },
         "metan": {
           "text_color": "#C995FF",
