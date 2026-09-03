@@ -12,6 +12,9 @@ from typing import Any
 from common import REPO_ROOT, media_duration, read_json, write_json
 
 
+MOUTH_STATES = {"a", "i", "u", "e", "o", "n", "closed"}
+
+
 def post_json(url: str, payload: dict[str, Any] | None = None) -> tuple[bytes, str]:
     data = b"" if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(url, data=data, method="POST")
@@ -26,6 +29,50 @@ def wav_spec(path: Path) -> tuple[wave._wave_params, bytes, float]:
         frames = wav.readframes(params.nframes)
         duration = params.nframes / params.framerate
     return params, frames, duration
+
+
+def audio_query_mouth_timing(query: dict[str, Any], audio_duration: float) -> list[dict[str, Any]]:
+    """Convert VOICEVOX mora timing into relative mouth-shape intervals."""
+    speed_scale = max(0.01, float(query.get("speedScale", 1.0)))
+    phases: list[tuple[str, float]] = []
+
+    def append(state: str, duration: float) -> None:
+        duration = max(0.0, duration)
+        state = state if state in MOUTH_STATES else "closed"
+        if duration <= 0:
+            return
+        if phases and phases[-1][0] == state:
+            phases[-1] = (state, phases[-1][1] + duration)
+        else:
+            phases.append((state, duration))
+
+    append("closed", float(query.get("prePhonemeLength", 0.0)))
+    for phrase in query.get("accent_phrases", []):
+        for mora in phrase.get("moras", []):
+            vowel = str(mora.get("vowel", "")).lower()
+            state = vowel if vowel in MOUTH_STATES - {"closed"} else "closed"
+            consonant_length = float(mora.get("consonant_length") or 0.0)
+            vowel_length = float(mora.get("vowel_length") or 0.0)
+            append(state, (consonant_length + vowel_length) / speed_scale)
+        pause = phrase.get("pause_mora")
+        if pause:
+            consonant_length = float(pause.get("consonant_length") or 0.0)
+            vowel_length = float(pause.get("vowel_length") or 0.0)
+            append("closed", (consonant_length + vowel_length) / speed_scale)
+    append("closed", float(query.get("postPhonemeLength", 0.0)))
+
+    nominal_duration = sum(duration for _, duration in phases)
+    if nominal_duration <= 0 or audio_duration <= 0:
+        return [{"state": "closed", "start": 0.0, "end": max(0.0, audio_duration)}]
+
+    scale = audio_duration / nominal_duration
+    cursor = 0.0
+    timing: list[dict[str, Any]] = []
+    for index, (state, duration) in enumerate(phases):
+        start = cursor
+        cursor = audio_duration if index == len(phases) - 1 else cursor + duration * scale
+        timing.append({"state": state, "start": start, "end": cursor})
+    return timing
 
 
 def main() -> int:
@@ -68,13 +115,13 @@ def main() -> int:
                 **segment.get("voicevox", {}),
             }
             wav_path = segment_dir / f"{segment_id}.wav"
+            query_url = f"{base_url}/audio_query?{urllib.parse.urlencode({'text': segment['text'], 'speaker': segment_speaker})}"
+            query_bytes, _ = post_json(query_url)
+            query = json.loads(query_bytes.decode("utf-8"))
+            for key, value in segment_settings.items():
+                if key in query:
+                    query[key] = value
             if args.force or not wav_path.exists():
-                query_url = f"{base_url}/audio_query?{urllib.parse.urlencode({'text': segment['text'], 'speaker': segment_speaker})}"
-                query_bytes, _ = post_json(query_url)
-                query = json.loads(query_bytes.decode("utf-8"))
-                for key, value in segment_settings.items():
-                    if key in query:
-                        query[key] = value
                 synthesis_url = f"{base_url}/synthesis?{urllib.parse.urlencode({'speaker': segment_speaker})}"
                 audio_bytes, content_type = post_json(synthesis_url, query)
                 if content_type not in {"audio/wav", "audio/x-wav", "application/octet-stream"}:
@@ -96,6 +143,7 @@ def main() -> int:
                     "hold_after": float(segment.get("hold_after", default_gap)),
                     "wav": wav_path.relative_to(project_dir).as_posix(),
                     "ffprobe_duration": probed_duration,
+                    "mouth_timing": audio_query_mouth_timing(query, probed_duration),
                     "params": params,
                     "frames": frames,
                 }
@@ -124,7 +172,18 @@ def main() -> int:
             timing_segments.append(
                 {
                     key: record[key]
-                    for key in ("id", "scene_id", "text", "highlight", "speaker", "speaker_key", "hold_after", "wav", "ffprobe_duration")
+                    for key in (
+                        "id",
+                        "scene_id",
+                        "text",
+                        "highlight",
+                        "speaker",
+                        "speaker_key",
+                        "hold_after",
+                        "wav",
+                        "ffprobe_duration",
+                        "mouth_timing",
+                    )
                 }
                 | {"start": start, "end": end, "audio_duration": end - start}
             )
@@ -142,7 +201,7 @@ def main() -> int:
 
     combined_duration = media_duration(narration_path)
     timing = {
-        "schema_version": 1,
+        "schema_version": 2,
         "voicevox_engine_version": engine_version,
         "speaker": speaker,
         "speakers": speaker_map,

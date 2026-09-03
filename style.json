@@ -24,16 +24,23 @@
     "dialogue": {
       "mode_name": "掛け合いの動画",
       "speaker_labels": true,
+      "size": 68,
+      "border_style": 1,
+      "inner_outline": 4,
+      "outer_outline": 9,
+      "shadow": 0,
       "speaker_styles": {
         "zundamon": {
           "text_color": "#66E07A",
-          "emphasis_color": "#C8FFD0",
-          "panel_color": "#146B32"
+          "emphasis_color": "#66E07A",
+          "inner_outline_color": "#000000",
+          "outer_outline_color": "#FFFFFF"
         },
         "metan": {
           "text_color": "#C995FF",
-          "emphasis_color": "#F0D9FF",
-          "panel_color": "#5B287D"
+          "emphasis_color": "#C995FF",
+          "inner_outline_color": "#FFFFFF",
+          "outer_outline_color": "#000000"
         }
       }
     }
@@ -81,20 +88,29 @@
   "dialogue_characters": {
     "enabled": true,
     "show_only_speaking": true,
-    "mouth_fps": 12,
-    "rms_threshold": 0.025,
-    "height_percent": 58.0,
-    "bottom_percent": -9.2592592593,
+    "mouth_transition_seconds": 0.04,
+    "height_percent": 87.0,
+    "bottom_percent": -18.5185185185,
     "characters": {
       "zundamon": {
         "closed": "assets/dialogue-characters/zundamon-closed.png",
-        "open": "assets/dialogue-characters/zundamon-open.png",
+        "a": "assets/dialogue-characters/zundamon-a.png",
+        "i": "assets/dialogue-characters/zundamon-i.png",
+        "u": "assets/dialogue-characters/zundamon-u.png",
+        "e": "assets/dialogue-characters/zundamon-e.png",
+        "o": "assets/dialogue-characters/zundamon-o.png",
+        "n": "assets/dialogue-characters/zundamon-n.png",
         "side": "left",
         "margin_x_percent": 3.5
       },
       "metan": {
         "closed": "assets/dialogue-characters/metan-closed.png",
-        "open": "assets/dialogue-characters/metan-open.png",
+        "a": "assets/dialogue-characters/metan-a.png",
+        "i": "assets/dialogue-characters/metan-i.png",
+        "u": "assets/dialogue-characters/metan-u.png",
+        "e": "assets/dialogue-characters/metan-e.png",
+        "o": "assets/dialogue-characters/metan-o.png",
+        "n": "assets/dialogue-characters/metan-n.png",
         "side": "right",
         "margin_x_percent": 3.5
       }

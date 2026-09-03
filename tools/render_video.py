@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import array
 import json
 import math
 import os
-import sys
-import wave
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -32,6 +29,7 @@ RIGHTS_WARNING = (
 )
 SCENE_RENDERER_VERSION = 3
 OUTPUT_RENDERER_VERSION = 1
+MOUTH_STATES = {"a", "i", "u", "e", "o", "n", "closed"}
 
 
 def quiet_ffmpeg(ffmpeg: Path) -> list[str | Path]:
@@ -404,53 +402,33 @@ def dialogue_characters_enabled(timing: dict[str, Any], config: dict[str, Any]) 
     return bool(config.get("enabled", True)) and len(used_speakers) >= 2, used_speakers
 
 
-def wav_mouth_states(path: Path, mouth_fps: float, rms_threshold: float) -> list[bool]:
-    if mouth_fps <= 0:
-        raise ValueError("dialogue_characters.mouth_fpsは正数にしてください")
-    with wave.open(str(path), "rb") as source:
-        if source.getsampwidth() != 2 or source.getcomptype() != "NONE":
-            raise ValueError(f"口パク解析は16bit PCM WAVに対応しています: {path}")
-        channels = source.getnchannels()
-        sample_rate = source.getframerate()
-        samples = array.array("h")
-        samples.frombytes(source.readframes(source.getnframes()))
-    if sys.byteorder != "little":
-        samples.byteswap()
-
-    chunk_samples = max(channels, round(sample_rate / mouth_fps) * channels)
-    states: list[bool] = []
-    for offset in range(0, len(samples), chunk_samples):
-        chunk = samples[offset : offset + chunk_samples]
-        if not chunk:
-            continue
-        rms = math.sqrt(sum(sample * sample for sample in chunk) / len(chunk)) / 32768
-        states.append(rms >= rms_threshold)
-    return states or [False]
-
-
 def dialogue_character_intervals(
     project_dir: Path,
     timing: dict[str, Any],
     config: dict[str, Any],
 ) -> list[dict[str, Any]]:
     characters = config.get("characters", {})
-    mouth_fps = float(config.get("mouth_fps", 12))
-    threshold = float(config.get("rms_threshold", 0.025))
     intervals: list[dict[str, Any]] = []
     for segment in timing.get("segments", []):
         speaker = str(segment.get("speaker_key", "default"))
         if speaker not in characters:
             continue
-        wav_path = project_file(project_dir, segment["wav"])
-        states = wav_mouth_states(wav_path, mouth_fps, threshold)
         segment_start = float(segment["start"])
         segment_end = float(segment["end"])
-        for index, is_open in enumerate(states):
-            start = segment_start + index / mouth_fps
-            end = min(segment_end, segment_start + (index + 1) / mouth_fps)
+        mouth_timing = segment.get("mouth_timing")
+        if not isinstance(mouth_timing, list) or not mouth_timing:
+            raise ValueError(
+                "audio/timing.jsonにVOICEVOX AudioQueryの口形タイミングがありません。"
+                "tools/voicevox_synthesize.pyを再実行してください"
+            )
+        for mouth in mouth_timing:
+            state = str(mouth.get("state", "closed"))
+            if state not in MOUTH_STATES:
+                state = "closed"
+            start = max(segment_start, segment_start + float(mouth["start"]))
+            end = min(segment_end, segment_start + float(mouth["end"]))
             if end <= start:
                 continue
-            state = "open" if is_open else "closed"
             previous = intervals[-1] if intervals else None
             if (
                 previous
@@ -502,6 +480,58 @@ def character_state_schedule(
     return schedule
 
 
+def add_mouth_transitions(
+    schedule: list[dict[str, Any]], transition_seconds: float
+) -> tuple[list[dict[str, Any]], dict[str, tuple[str, str]]]:
+    if transition_seconds <= 0:
+        return schedule, {}
+
+    boundaries: dict[int, tuple[float, str]] = {}
+    blend_specs: dict[str, tuple[str, str]] = {}
+    blend_state_by_pair: dict[tuple[str, str], str] = {}
+    for index, (current, following) in enumerate(zip(schedule, schedule[1:], strict=False)):
+        current_state = str(current["state"])
+        next_state = str(following["state"])
+        if "-" not in current_state or "-" not in next_state:
+            continue
+        current_speaker, current_mouth = current_state.rsplit("-", 1)
+        next_speaker, next_mouth = next_state.rsplit("-", 1)
+        if current_speaker != next_speaker or current_mouth == next_mouth:
+            continue
+        half = min(
+            transition_seconds / 2,
+            (float(current["end"]) - float(current["start"])) / 2,
+            (float(following["end"]) - float(following["start"])) / 2,
+        )
+        if half <= 0.001:
+            continue
+        pair = (current_state, next_state)
+        blend_state = blend_state_by_pair.get(pair, "")
+        if not blend_state:
+            blend_state = f"blend-{len(blend_specs) + 1:04d}"
+            blend_state_by_pair[pair] = blend_state
+            blend_specs[blend_state] = pair
+        boundaries[index] = (half, blend_state)
+
+    transitioned: list[dict[str, Any]] = []
+    for index, item in enumerate(schedule):
+        start = float(item["start"])
+        end = float(item["end"])
+        if index - 1 in boundaries:
+            start += boundaries[index - 1][0]
+        if index in boundaries:
+            end -= boundaries[index][0]
+        if end > start:
+            transitioned.append({"state": item["state"], "start": start, "end": end})
+        if index in boundaries:
+            half, blend_state = boundaries[index]
+            boundary = float(item["end"])
+            transitioned.append(
+                {"state": blend_state, "start": boundary - half, "end": boundary + half}
+            )
+    return transitioned, blend_specs
+
+
 def make_character_canvas(
     ffmpeg: Path,
     asset: Path | None,
@@ -531,6 +561,33 @@ def make_character_canvas(
     run(command)
 
 
+def make_blend_canvas(ffmpeg: Path, first: Path, second: Path, output: Path) -> None:
+    run(
+        [
+            *quiet_ffmpeg(ffmpeg),
+            "-y",
+            "-i",
+            first,
+            "-i",
+            second,
+            "-filter_complex",
+            "[0:v]format=rgba[first];[1:v]format=rgba[second];"
+            "[first][second]blend=all_expr='A*0.5+B*0.5',format=rgba[out]",
+            "-map",
+            "[out]",
+            "-frames:v",
+            "1",
+            "-update",
+            "1",
+            "-c:v",
+            "png",
+            "-pix_fmt",
+            "rgba",
+            output,
+        ]
+    )
+
+
 def make_character_overlay(
     ffmpeg: Path,
     project_dir: Path,
@@ -538,6 +595,7 @@ def make_character_overlay(
     intervals: list[dict[str, Any]],
     width: int,
     height: int,
+    fps: int,
     total_duration: float,
 ) -> Path:
     work_dir = project_dir / "work" / "dialogue-characters"
@@ -545,7 +603,9 @@ def make_character_overlay(
     overlay_path = work_dir / "overlay.webm"
     manifest_path = project_dir / "work" / "character-rendering.json"
     configured = config.get("characters", {})
-    active_states = {f"{item['speaker']}-{item['state']}" for item in intervals}
+    active_mouths_by_speaker: dict[str, set[str]] = {}
+    for item in intervals:
+        active_mouths_by_speaker.setdefault(str(item["speaker"]), set()).add(str(item["state"]))
     character_height = max(1, round(height * float(config.get("height_percent", 58.0)) / 100))
     bottom = round(height * float(config.get("bottom_percent", 0.0)) / 100)
     state_specs: dict[str, dict[str, Any]] = {}
@@ -553,10 +613,8 @@ def make_character_overlay(
     for speaker, speaker_config in configured.items():
         side = str(speaker_config.get("side", "right"))
         margin = max(0, round(width * float(speaker_config.get("margin_x_percent", 3.5)) / 100))
-        for state in ("closed", "open"):
+        for state in sorted(active_mouths_by_speaker.get(speaker, set())):
             key = f"{speaker}-{state}"
-            if key not in active_states:
-                continue
             asset = character_asset(project_dir, str(speaker_config[state]))
             state_assets[key] = asset
             state_specs[key] = {
@@ -567,12 +625,16 @@ def make_character_overlay(
                 "margin": margin,
             }
 
-    schedule = character_state_schedule(intervals, total_duration)
+    schedule, blend_specs = add_mouth_transitions(
+        character_state_schedule(intervals, total_duration),
+        float(config.get("mouth_transition_seconds", 0.04)),
+    )
     spec = {
-        "renderer_version": 1,
+        "renderer_version": 2,
         "width": width,
         "height": height,
-        "mouth_fps": float(config.get("mouth_fps", 12)),
+        "fps": fps,
+        "mouth_transition_seconds": float(config.get("mouth_transition_seconds", 0.04)),
         "character_height": character_height,
         "bottom": bottom,
         "states": state_specs,
@@ -598,6 +660,14 @@ def make_character_overlay(
             int(state["margin"]),
             bottom,
         )
+    for blend_state, (first_state, second_state) in blend_specs.items():
+        canvases[blend_state] = work_dir / f"{blend_state}.png"
+        make_blend_canvas(
+            ffmpeg,
+            canvases[first_state],
+            canvases[second_state],
+            canvases[blend_state],
+        )
 
     concat_path = work_dir / "schedule.ffconcat"
     concat_lines = ["ffconcat version 1.0"]
@@ -618,7 +688,7 @@ def make_character_overlay(
             "-i",
             concat_path,
             "-vf",
-            f"fps={float(config.get('mouth_fps', 12)):g},format=yuva420p",
+            f"fps={fps:g},format=yuva420p",
             "-t",
             f"{total_duration:.6f}",
             "-an",
@@ -640,7 +710,7 @@ def make_character_overlay(
         {
             "enabled": True,
             "show_only_speaking": True,
-            "rms_threshold": float(config.get("rms_threshold", 0.025)),
+            "mouth_timing_source": "voicevox_audio_query",
             "intervals": intervals,
             "spec": spec,
         },
@@ -759,6 +829,7 @@ def main() -> int:
             character_intervals,
             width,
             height,
+            fps,
             total_duration,
         )
     else:

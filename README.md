@@ -43,7 +43,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\start_voicevox.ps1
 .\.venv\Scripts\python.exe .\tools\install_dialogue_characters.py
 ```
 
-最後のコマンドは、掛け合い動画で使う既存のずんだもん・四国めたん立ち絵を[配布元](https://nightwork.sakura.ne.jp/ukagaka/shell/Shikokumetan_Zundamon_Shellkit/Shikokumetan_Zundamon_Shellkit.html)から一度だけ取得し、口を閉じた画像と開いた画像をローカル生成します。生成画像はGit管理しません。
+最後のコマンドは、掛け合い動画で使う既存のずんだもん・四国めたん立ち絵を[配布元](https://nightwork.sakura.ne.jp/ukagaka/shell/Shikokumetan_Zundamon_Shellkit/Shikokumetan_Zundamon_Shellkit.html)から一度だけ取得し、`a / i / u / e / o / n / closed` の口形画像をローカル生成します。生成画像はGit管理しません。
 
 新しいPATHが反映されていないシェルでも、補助スクリプトはwingetの標準インストール先を探索します。VOICEVOX APIの既定URLは `http://127.0.0.1:50021` です。別URLは `VOICEVOX_URL`、実行ファイルは `VIDEO_FFMPEG`、`VIDEO_FFPROBE`、`KDENLIVE_PATH`、`MLT_MELT`、`VOICEVOX_ENGINE` で上書きできます。
 
@@ -139,7 +139,7 @@ validatorは、完成動画、`project.json`、必須shot素材、ASS字幕、`a
 
 Remotionは図解やオープニングが必要な時だけ使います。
 
-掛け合い動画では、発話中の話者だけを映像上へ表示します。話していない側と発話間の無音では両者とも非表示です。`speaker_key` と `audio/timing.json` の実測時刻で話者を切り替え、各発話WAVの音量を12fpsで解析して閉じ口・開き口を切り替えるため、レンダーごとにLLMを使いません。位置、大きさ、口パク感度、素材パスは `style.json` の `dialogue_characters` で変更できます。
+掛け合い動画では、発話中の話者だけを上半身が大きく見える既定配置で映像上へ表示します。話していない側と発話間の無音では両者とも非表示です。`speaker_key` と `audio/timing.json` の実測時刻で話者を切り替え、VOICEVOX AudioQueryの音素情報から `a / i / u / e / o / n / closed` を選びます。口形間には短い中間合成を挟み、レンダーごとにLLMを使いません。位置、大きさ、補間時間、素材パスは `style.json` の `dialogue_characters` で変更できます。話者別字幕は帯なしで、ずんだもんが緑文字・黒内縁・白外縁、めたんが紫文字・白内縁・黒外縁の二重縁取りです。
 
 ## Kdenliveで編集する
 

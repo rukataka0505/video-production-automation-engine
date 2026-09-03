@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import json
-import struct
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
-import wave
 from unittest.mock import patch
 
 import opentimelineio as otio
@@ -21,6 +19,7 @@ import build_timeline
 import render_job
 import render_video
 import validate_project
+import voicevox_synthesize
 from common import delivery_filename, scene_shots, shot_durations
 
 
@@ -52,6 +51,53 @@ class SubtitleWrappingTests(unittest.TestCase):
         self.assertEqual(wrapped.replace(r"\N", ""), text)
         self.assertNotIn(r"サイバー\Nキャブ", wrapped)
         self.assertNotIn(r"Open\NTimelineIO", wrapped)
+
+    def test_dialogue_subtitles_use_two_outline_layers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "audio").mkdir()
+            (root / "project.json").write_text(
+                json.dumps(
+                    {
+                        "title": "掛け合い字幕",
+                        "scenes": [
+                            {
+                                "id": "scene-1",
+                                "narration": [
+                                    {"id": "line-1", "text": "テストなのだ", "speaker_key": "zundamon"}
+                                ],
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (root / "audio" / "timing.json").write_text(
+                json.dumps(
+                    {
+                        "segments": [
+                            {
+                                "id": "line-1",
+                                "text": "テストなのだ",
+                                "speaker_key": "zundamon",
+                                "start": 0.0,
+                                "end": 1.0,
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(sys, "argv", ["build_ass.py", str(root)]):
+                build_ass.main()
+            ass_path = root / "subtitles" / "subtitles.ass"
+            content = ass_path.read_text(encoding="utf-8-sig")
+            self.assertIn("Style: ZundamonOuter", content)
+            self.assertIn("Style: Zundamon", content)
+            self.assertIn("double-outline-outer", content)
+            self.assertEqual(validate_project.read_ass_texts(ass_path), ["テストなのだ"])
 
 
 class RenderCommandTests(unittest.TestCase):
@@ -213,17 +259,6 @@ class RenderCommandTests(unittest.TestCase):
 
 
 class DialogueCharacterTests(unittest.TestCase):
-    def write_wav(self, path: Path, amplitudes: list[int], *, sample_rate: int = 1200) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with wave.open(str(path), "wb") as output:
-            output.setnchannels(1)
-            output.setsampwidth(2)
-            output.setframerate(sample_rate)
-            values: list[int] = []
-            for amplitude in amplitudes:
-                values.extend([amplitude] * 100)
-            output.writeframes(struct.pack(f"<{len(values)}h", *values))
-
     def test_dialogue_requires_two_configured_speakers(self) -> None:
         config = {"enabled": True, "characters": {"zundamon": {}, "metan": {}}}
         enabled, speakers = render_video.dialogue_characters_enabled(
@@ -238,43 +273,75 @@ class DialogueCharacterTests(unittest.TestCase):
         )
         self.assertFalse(enabled)
 
-    def test_mouth_intervals_follow_wav_and_end_before_hold(self) -> None:
+    def test_audio_query_maps_vowels_and_silence_to_mouth_shapes(self) -> None:
+        query = {
+            "speedScale": 1.0,
+            "prePhonemeLength": 0.1,
+            "postPhonemeLength": 0.1,
+            "accent_phrases": [
+                {
+                    "moras": [
+                        {"consonant_length": 0.05, "vowel": "a", "vowel_length": 0.1},
+                        {"consonant_length": None, "vowel": "I", "vowel_length": 0.1},
+                        {"consonant_length": None, "vowel": "N", "vowel_length": 0.1},
+                        {"consonant_length": None, "vowel": "cl", "vowel_length": 0.1},
+                    ],
+                    "pause_mora": {"consonant_length": None, "vowel": "pau", "vowel_length": 0.1},
+                }
+            ],
+        }
+        timing = voicevox_synthesize.audio_query_mouth_timing(query, 0.75)
+        self.assertEqual([item["state"] for item in timing], ["closed", "a", "i", "n", "closed"])
+        self.assertAlmostEqual(timing[0]["start"], 0.0)
+        self.assertAlmostEqual(timing[-1]["end"], 0.75)
+
+    def test_mouth_intervals_follow_audio_query_and_end_before_hold(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            wav_path = root / "audio" / "segments" / "line.wav"
-            self.write_wav(wav_path, [0, 10000, 10000, 0])
             timing = {
                 "segments": [
                     {
                         "speaker_key": "zundamon",
-                        "wav": "audio/segments/line.wav",
                         "start": 1.0,
-                        "end": 4 / 12 + 1.0,
+                        "end": 1.4,
                         "hold_after": 0.5,
+                        "mouth_timing": [
+                            {"state": "closed", "start": 0.0, "end": 0.1},
+                            {"state": "a", "start": 0.1, "end": 0.25},
+                            {"state": "n", "start": 0.25, "end": 0.4},
+                        ],
                     }
                 ]
             }
-            config = {
-                "mouth_fps": 12,
-                "rms_threshold": 0.025,
-                "characters": {"zundamon": {}},
-            }
+            config = {"characters": {"zundamon": {}}}
             intervals = render_video.dialogue_character_intervals(root, timing, config)
-            self.assertEqual([item["state"] for item in intervals], ["closed", "open", "closed"])
+            self.assertEqual([item["state"] for item in intervals], ["closed", "a", "n"])
             self.assertAlmostEqual(intervals[0]["start"], 1.0)
-            self.assertAlmostEqual(intervals[-1]["end"], 4 / 12 + 1.0)
-            self.assertLess(intervals[-1]["end"], 1.0 + 4 / 12 + 0.5)
+            self.assertAlmostEqual(intervals[-1]["end"], 1.4)
+            self.assertLess(intervals[-1]["end"], 1.4 + 0.5)
+
+    def test_short_transition_is_added_only_between_same_speaker_mouths(self) -> None:
+        schedule = [
+            {"state": "zundamon-a", "start": 0.0, "end": 0.2},
+            {"state": "zundamon-i", "start": 0.2, "end": 0.4},
+            {"state": "none", "start": 0.4, "end": 0.5},
+        ]
+        transitioned, blends = render_video.add_mouth_transitions(schedule, 0.04)
+        self.assertEqual([item["state"] for item in transitioned], ["zundamon-a", "blend-0001", "zundamon-i", "none"])
+        self.assertEqual(blends, {"blend-0001": ("zundamon-a", "zundamon-i")})
+        self.assertAlmostEqual(transitioned[1]["start"], 0.18)
+        self.assertAlmostEqual(transitioned[1]["end"], 0.22)
 
     def test_schedule_hides_everyone_between_speakers(self) -> None:
         intervals = [
             {"speaker": "zundamon", "state": "closed", "start": 0.0, "end": 0.1},
-            {"speaker": "zundamon", "state": "open", "start": 0.1, "end": 0.2},
+            {"speaker": "zundamon", "state": "a", "start": 0.1, "end": 0.2},
             {"speaker": "metan", "state": "closed", "start": 0.3, "end": 0.4},
         ]
         schedule = render_video.character_state_schedule(intervals, 0.5)
         self.assertEqual(
             [item["state"] for item in schedule],
-            ["zundamon-closed", "zundamon-open", "none", "metan-closed", "none"],
+            ["zundamon-closed", "zundamon-a", "none", "metan-closed", "none"],
         )
         self.assertEqual(schedule[2], {"state": "none", "start": 0.2, "end": 0.3})
 

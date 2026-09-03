@@ -34,7 +34,12 @@ CHARACTERS: dict[str, dict[str, Any]] = {
         ],
         "mouth": {
             "closed": "Zundamon/口/むふ.png",
-            "open": "Zundamon/口/ほあ.png",
+            "a": "Zundamon/口/ほあ.png",
+            "i": "Zundamon/口/△.png",
+            "u": "Zundamon/口/ゆ.png",
+            "e": "Zundamon/口/はへえ.png",
+            "o": "Zundamon/口/お.png",
+            "n": "Zundamon/口/んー.png",
         },
         "foreground": ["Zundamon/枝豆/枝豆通常.png"],
     },
@@ -55,7 +60,12 @@ CHARACTERS: dict[str, dict[str, Any]] = {
         ],
         "mouth": {
             "closed": "Metan/口/ほほえみ.png",
-            "open": "Metan/口/わあー.png",
+            "a": "Metan/口/わあー.png",
+            "i": "Metan/口/いー.png",
+            "u": "Metan/口/ゆ.png",
+            "e": "Metan/口/うえー.png",
+            "o": "Metan/口/お.png",
+            "n": "Metan/口/んー.png",
         },
         "foreground": ["Metan/前髪もみあげ.png"],
     },
@@ -103,7 +113,11 @@ def compose_png(ffmpeg: Path, inputs: list[Path], output: Path) -> None:
 
 
 def install(*, force: bool = False) -> list[Path]:
-    outputs = [OUTPUT_DIR / f"{speaker}-{state}.png" for speaker in CHARACTERS for state in ("closed", "open")]
+    outputs = [
+        OUTPUT_DIR / f"{speaker}-{state}.png"
+        for speaker, spec in CHARACTERS.items()
+        for state in spec["mouth"]
+    ]
     if not force and all(path.is_file() for path in outputs):
         return outputs
 

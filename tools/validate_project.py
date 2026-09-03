@@ -88,6 +88,8 @@ def read_ass_texts(path: Path) -> list[str]:
         end = parse_ass_time(fields[2])
         if end <= start:
             raise ValueError("ASSのDialogue時刻が逆転しています")
+        if fields[8] == "double-outline-outer":
+            continue
         texts.append(normalize_text(re.sub(r"\{[^}]*\}", "", fields[9])))
     return texts
 

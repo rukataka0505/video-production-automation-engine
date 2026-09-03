@@ -80,35 +80,84 @@ def main() -> int:
     project_dir = args.project_dir.resolve()
     timing = read_json(project_dir / "audio" / "timing.json")
     project = read_json(project_dir / "project.json")
-    style = {**read_json(REPO_ROOT / "style.json")["subtitles"], **project.get("subtitles", {})}
-    video = read_json(REPO_ROOT / "style.json")["video"] | project.get("video", {})
+    base_style = read_json(REPO_ROOT / "style.json")
+    base_subtitles = base_style["subtitles"]
+    project_subtitles = project.get("subtitles", {})
+    style = {**base_subtitles, **project_subtitles}
+    dialogue = {
+        **base_subtitles.get("dialogue", {}),
+        **project_subtitles.get("dialogue", {}),
+    }
+    dialogue["speaker_styles"] = {
+        **base_subtitles.get("dialogue", {}).get("speaker_styles", {}),
+        **project_subtitles.get("dialogue", {}).get("speaker_styles", {}),
+    }
+    video = base_style["video"] | project.get("video", {})
 
     primary = ass_color(style["primary_color"])
     emphasis = ass_color(style["emphasis_color"])
     outline = ass_color(style["outline_color"])
-    dialogue = style.get("dialogue", {})
     speaker_styles = dialogue.get("speaker_styles", {})
 
-    def ass_style(name: str, primary_color: str, emphasis_color: str, panel_color: str) -> str:
+    def ass_style(
+        name: str,
+        primary_color: str,
+        emphasis_color: str,
+        outline_color: str,
+        *,
+        size: int | float,
+        border_style: int,
+        outline_width: int | float,
+        shadow: int | float,
+    ) -> str:
         return (
-            f"Style: {name},{style['font']},{style['size']},{ass_color(primary_color)},"
-            f"{ass_color(emphasis_color)},{ass_color(panel_color)},&H70000000,-1,0,0,0,100,100,0,0,"
-            f"{style.get('border_style', 1)},{style['outline']},{style['shadow']},2,72,72,{style['margin_vertical']},1"
+            f"Style: {name},{style['font']},{size},{ass_color(primary_color)},"
+            f"{ass_color(emphasis_color)},{ass_color(outline_color)},&H70000000,-1,0,0,0,100,100,0,0,"
+            f"{border_style},{outline_width},{shadow},2,72,72,{style['margin_vertical']},1"
         )
 
     style_lines = [
-        ass_style("Default", style["primary_color"], style["emphasis_color"], style["outline_color"])
+        ass_style(
+            "Default",
+            style["primary_color"],
+            style["emphasis_color"],
+            style["outline_color"],
+            size=style["size"],
+            border_style=int(style.get("border_style", 1)),
+            outline_width=style["outline"],
+            shadow=style["shadow"],
+        )
     ]
-    style_name_by_speaker: dict[str, str] = {}
+    style_names_by_speaker: dict[str, tuple[str, str]] = {}
     for speaker_key, speaker_style in speaker_styles.items():
-        style_name = speaker_key.capitalize()
-        style_name_by_speaker[speaker_key] = style_name
+        inner_style_name = speaker_key.capitalize()
+        outer_style_name = f"{inner_style_name}Outer"
+        style_names_by_speaker[speaker_key] = (outer_style_name, inner_style_name)
+        dialogue_size = dialogue.get("size", style["size"])
+        dialogue_border_style = int(dialogue.get("border_style", 1))
+        dialogue_shadow = dialogue.get("shadow", 0)
         style_lines.append(
             ass_style(
-                style_name,
+                outer_style_name,
                 speaker_style.get("text_color", style["primary_color"]),
                 speaker_style.get("emphasis_color", style["emphasis_color"]),
-                speaker_style.get("panel_color", style["outline_color"]),
+                speaker_style.get("outer_outline_color", style["outline_color"]),
+                size=dialogue_size,
+                border_style=dialogue_border_style,
+                outline_width=dialogue.get("outer_outline", style["outline"]),
+                shadow=dialogue_shadow,
+            )
+        )
+        style_lines.append(
+            ass_style(
+                inner_style_name,
+                speaker_style.get("text_color", style["primary_color"]),
+                speaker_style.get("emphasis_color", style["emphasis_color"]),
+                speaker_style.get("inner_outline_color", style["outline_color"]),
+                size=dialogue_size,
+                border_style=dialogue_border_style,
+                outline_width=dialogue.get("inner_outline", style["outline"]),
+                shadow=dialogue_shadow,
             )
         )
     header = f"""[Script Info]
@@ -132,19 +181,31 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         speaker_style = speaker_styles.get(speaker_key, {})
         segment_primary = ass_color(speaker_style.get("text_color", style["primary_color"]))
         segment_emphasis = ass_color(speaker_style.get("emphasis_color", style["emphasis_color"]))
-        style_name = style_name_by_speaker.get(speaker_key, "Default")
+        style_names = style_names_by_speaker.get(speaker_key)
         text = segment["text"]
         text = wrap_japanese(text, int(style["max_chars_per_line"]), int(style["max_lines"]))
         text = text.replace("{", "｛").replace("}", "｝")
         for word in segment.get("highlight", []):
             text = text.replace(word, f"{{\\c{segment_emphasis}}}{word}{{\\c{segment_primary}}}")
-        events.append(
-            f"Dialogue: 0,{ass_time(segment['start'])},{ass_time(segment['end'])},{style_name},{speaker_key},0,0,0,,{text}"
-        )
+        if style_names:
+            outer_style_name, inner_style_name = style_names
+            events.append(
+                f"Dialogue: 0,{ass_time(segment['start'])},{ass_time(segment['end'])},"
+                f"{outer_style_name},{speaker_key},0,0,0,double-outline-outer,{text}"
+            )
+            events.append(
+                f"Dialogue: 1,{ass_time(segment['start'])},{ass_time(segment['end'])},"
+                f"{inner_style_name},{speaker_key},0,0,0,,{text}"
+            )
+        else:
+            events.append(
+                f"Dialogue: 0,{ass_time(segment['start'])},{ass_time(segment['end'])},"
+                f"Default,{speaker_key},0,0,0,,{text}"
+            )
     output = project_dir / "subtitles" / "subtitles.ass"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(header + "\n".join(events) + "\n", encoding="utf-8-sig")
-    print(f"ASS字幕: {output} ({len(events)} cues)")
+    print(f"ASS字幕: {output} ({len(timing['segments'])} cues)")
     return 0
 
 
