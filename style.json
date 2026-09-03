@@ -90,7 +90,7 @@
     "show_only_speaking": true,
     "mouth_transition_seconds": 0.04,
     "height_percent": 87.0,
-    "bottom_percent": -18.5185185185,
+    "bottom_percent": -27.7777777778,
     "characters": {
       "zundamon": {
         "closed": "assets/dialogue-characters/zundamon-closed.png",
