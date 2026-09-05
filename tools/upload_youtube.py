@@ -402,7 +402,7 @@ def apply_thumbnail(
 ) -> dict[str, Any]:
     image_hash = sha256(image_path)
     if not force and thumbnail_is_current(manifest, image_hash):
-        manifest["status"] = "uploaded_and_verified"
+        manifest["status"] = "uploaded_and_verified" if manifest.get("processing_status") == "succeeded" else "uploaded_processing"
         return manifest
     response = set_thumbnail(access_token, video_id, image_path)
     manifest["thumbnail"] = {
@@ -413,7 +413,7 @@ def apply_thumbnail(
         "set_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "api_response": response,
     }
-    manifest["status"] = "uploaded_and_verified"
+    manifest["status"] = "uploaded_and_verified" if manifest.get("processing_status") == "succeeded" else "uploaded_processing"
     return manifest
 
 
@@ -680,9 +680,8 @@ def main() -> int:
         print(json.dumps(manifest, ensure_ascii=False, indent=2))
         return 0
 
-    validation_path = project_dir / "qa" / "validation.json"
-    if not validation_path.is_file() or read_json(validation_path).get("passed") is not True:
-        raise RuntimeError("qa/validation.jsonが合格していません。先にvalidate_project.pyを実行してください")
+    from video import delivery_check
+    delivery_check(project_dir)
     video_path = final_output_path(project_dir, project)
     if not video_path.is_file():
         raise FileNotFoundError(f"完成動画がありません: {video_path}")

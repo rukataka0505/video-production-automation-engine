@@ -2,96 +2,31 @@
   "video": {
     "width": 1920,
     "height": 1080,
-    "fps": 30,
-    "default_duration_seconds": 75,
-    "default_news_window_days": 7,
-    "max_still_seconds": 7.0,
-    "target_visual_change_seconds": 4.5,
-    "background_color": "#07111F"
+    "fps": 30
   },
-  "subtitles": {
-    "font": "Yu Gothic UI Semibold",
-    "size": 60,
-    "primary_color": "#FFFFFF",
-    "emphasis_color": "#FFF36A",
-    "outline_color": "#168C4A",
-    "border_style": 3,
-    "outline": 12,
-    "shadow": 3,
-    "margin_vertical": 60,
-    "max_chars_per_line": 21,
-    "max_lines": 2,
-    "dialogue": {
-      "mode_name": "掛け合いの動画",
-      "speaker_labels": true,
-      "size": 68,
-      "border_style": 1,
-      "inner_outline": 4,
-      "outer_outline": 9,
-      "shadow": 0,
-      "speaker_styles": {
-        "zundamon": {
-          "text_color": "#66E07A",
-          "emphasis_color": "#66E07A",
-          "inner_outline_color": "#FFFFFF",
-          "outer_outline_color": "#000000"
-        },
-        "metan": {
-          "text_color": "#C995FF",
-          "emphasis_color": "#C995FF",
-          "inner_outline_color": "#FFFFFF",
-          "outer_outline_color": "#000000"
-        }
-      }
-    }
-  },
-  "voicevox": {
-    "speaker": 3,
-    "speaker_label": "ずんだもん / ノーマル",
-    "speedScale": 1.08,
-    "pitchScale": 0.0,
-    "intonationScale": 1.1,
-    "volumeScale": 1.0,
-    "prePhonemeLength": 0.08,
-    "postPhonemeLength": 0.12,
-    "outputSamplingRate": 48000,
-    "outputStereo": false,
-    "speakers": {
-      "zundamon": {
-        "speaker": 3,
-        "label": "ずんだもん / ノーマル"
-      },
-      "metan": {
-        "speaker": 2,
-        "label": "四国めたん / ノーマル"
-      }
+  "voice": {
+    "style_id": 3,
+    "settings": {
+      "speedScale": 1.08,
+      "pitchScale": 0.0,
+      "intonationScale": 1.1,
+      "volumeScale": 1.0,
+      "prePhonemeLength": 0.08,
+      "postPhonemeLength": 0.12,
+      "outputSamplingRate": 48000,
+      "outputStereo": false
     }
   },
   "audio": {
-    "narration_lufs": -16,
-    "final_lufs": -14,
-    "true_peak_db": -1.5,
-    "bgm_volume": 0.08,
-    "default_segment_gap_seconds": 0.12
+    "gap": 0.3,
+    "duck_volume": 0.28,
+    "duck_seconds": 0.15
   },
-  "editing": {
-    "default_transition": "cut",
-    "transition_note": "内容上必要な場合だけ短いディゾルブを使う",
-    "still_motion": {
-      "default": "none",
-      "engine": "mlt_qtblend_transform",
-      "easing": "sinusoidal_in_out",
-      "max_zoom_percent": 3.0,
-      "max_pan_percent": 1.0
-    }
-  },
-  "dialogue_characters": {
-    "enabled": true,
-    "show_only_speaking": true,
+  "characters": {
     "mouth_transition_seconds": 0.04,
     "height_percent": 87.0,
     "bottom_percent": -27.7777777778,
-    "characters": {
+    "voices": {
       "zundamon": {
         "closed": "assets/dialogue-characters/zundamon-closed.png",
         "a": "assets/dialogue-characters/zundamon-a.png",
@@ -116,21 +51,8 @@
       }
     }
   },
-  "delivery": {
-    "filename_strategy": "project_title",
-    "preserve_resolution": true
-  },
-  "thumbnail": {
-    "filename": "thumbnail.jpg",
-    "width": 1280,
-    "height": 720,
-    "format": "jpeg"
-  },
   "youtube": {
-    "auto_upload": true,
-    "privacy_status": "private",
     "category_id": "22",
-    "made_for_kids": false,
-    "wait_for_processing": true
+    "made_for_kids": false
   }
 }

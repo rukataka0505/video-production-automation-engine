@@ -97,7 +97,7 @@ class YouTubeUploadTests(unittest.TestCase):
             path.write_bytes(b"\xff\xd8\xffnew-thumbnail")
             response = {"kind": "youtube#thumbnailSetResponse", "items": [{"high": {"url": "https://example.test/high.jpg"}}]}
             with patch.object(youtube, "set_thumbnail", return_value=response) as set_mock:
-                manifest = youtube.apply_thumbnail("access", "video-id", path, {})
+                manifest = youtube.apply_thumbnail("access", "video-id", path, {"processing_status": "succeeded"})
             set_mock.assert_called_once_with("access", "video-id", path)
             self.assertEqual(manifest["status"], "uploaded_and_verified")
             self.assertEqual(manifest["thumbnail"]["status"], "set")
@@ -114,6 +114,30 @@ class YouTubeUploadTests(unittest.TestCase):
             with patch.object(youtube, "set_thumbnail", return_value=response) as set_mock:
                 youtube.apply_thumbnail("access", "video-id", path, manifest, force=True)
             set_mock.assert_called_once()
+
+    def test_processing_video_is_not_reported_complete_after_thumbnail(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "thumbnail.jpg"
+            path.write_bytes(b"\xff\xd8\xffimage")
+            with patch.object(youtube, "set_thumbnail", return_value={"items": [{}]}):
+                manifest = youtube.apply_thumbnail("access", "id", path, {"processing_status": "processing"})
+            self.assertEqual(manifest["status"], "uploaded_processing")
+            with patch.object(youtube, "set_thumbnail") as upload:
+                self.assertEqual(youtube.apply_thumbnail("access", "id", path, manifest)["status"], "uploaded_processing")
+                upload.assert_not_called()
+
+    def test_same_video_reuses_remote_identity_and_different_video_does_not(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "youtube-upload.json"
+            path.write_text(json.dumps({"video_id": "saved", "sha256": "same"}), encoding="utf-8")
+            remote = {"id": "saved", "snippet": {"title": "試験"}, "status": {"privacyStatus": "private"}, "processingDetails": {"processingStatus": "succeeded"}}
+            with patch.object(youtube, "get_video", return_value=remote) as get:
+                result = youtube.existing_verified_upload(path, "same", "access", "試験")
+                self.assertEqual(result["video_id"], "saved")
+                get.assert_called_once()
+            with patch.object(youtube, "get_video") as get:
+                self.assertIsNone(youtube.existing_verified_upload(path, "changed", "access", "試験"))
+                get.assert_not_called()
 
     @unittest.skipUnless(os.name == "nt", "Windows DPAPI test")
     def test_refresh_token_is_dpapi_encrypted_and_round_trips(self) -> None:

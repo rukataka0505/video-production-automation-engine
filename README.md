@@ -1,150 +1,135 @@
-# YouTube解説動画制作環境
+# Codex動画制作エンジン
 
-Codexへの自然言語の依頼から、調査、構成、VOICEVOXナレーション、素材選定、ASS字幕、FFmpeg編集、完成動画、Kdenlive用OTIO、YouTubeへの非公開アップロードまで行うローカル作業環境です。制作判断はCodex、実処理は現在のOSS基盤と既存ツールが担当します。
+Codexが調査・脚本・素材・演出を判断し、ローカルのVOICEVOXとRemotionで動画にする。編集は台本や素材を修正して再生成する。
 
-## 使い方
+## セットアップ
 
-このフォルダをCodexで開き、例えば次のように依頼します。
-
-```text
-SpaceXの直近7日間の重要ニュースで動画作って
-```
-
-尺や表現を変えたい時は「3分で」「ニュース番組っぽく」「Starship中心」「字幕を大きめに」などを加えます。掛け合い形式は次のように指定します。
-
-```text
-量子コンピューターについて、3分の掛け合いの動画を作って
-```
-
-Codexは構成、ナレーション、shot、サムネイル方針、タイトル、納品設定を `project.json` に保存し、その内容をそのまま承認用に提示します。
-
-個人利用の案件では素材の出典、権利、ライセンス記録を制作必須条件にしません。公開、配布、商用利用する場合は用途に合う利用条件を確認してください。
-
-## 必要なソフト
-
-- FFmpeg / ffprobe
-- Kdenlive 26.04以降（OpenTimelineIOインポート対応、MLT `melt` 同梱）
-- VOICEVOX 0.25系
-- Python 3.13 と OpenTimelineIO 0.18.1
-- Node.js（Remotionが必要な動画だけ）
-
-Windowsでは次の構成を検証済みです。
+必要なのはPython 3.13、Node.js、FFmpeg/ffprobe、VOICEVOX。Python側は標準ライブラリだけを使う。
 
 ```powershell
-winget install --id Gyan.FFmpeg --exact
-winget install --id KDE.Kdenlive --exact
-winget install --id HiroshibaKazuyuki.VOICEVOX --exact
-winget install --id Python.Python.3.13 --exact
-
 py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-powershell -ExecutionPolicy Bypass -File .\tools\start_voicevox.ps1
-.\.venv\Scripts\python.exe .\tools\check_env.py
-.\.venv\Scripts\python.exe .\tools\install_dialogue_characters.py
+Push-Location remotion
+npm.cmd ci
+Pop-Location
+powershell -ExecutionPolicy Bypass -File tools/start_voicevox.ps1
+.\.venv\Scripts\python.exe tools/install_dialogue_characters.py
+.\.venv\Scripts\python.exe tools/video.py check
 ```
 
-最後のコマンドは、掛け合い動画で使う既存のずんだもん・四国めたん立ち絵を[配布元](https://nightwork.sakura.ne.jp/ukagaka/shell/Shikokumetan_Zundamon_Shellkit/Shikokumetan_Zundamon_Shellkit.html)から一度だけ取得し、`a / i / u / e / o / n / closed` の口形画像をローカル生成します。生成画像はGit管理しません。
+実行ファイルがPATHにない場合も標準のWindowsインストール先を探索する。`VIDEO_FFMPEG`、`VIDEO_FFPROBE`、`VOICEVOX_ENGINE`、`VOICEVOX_URL`で接続先を指定できる。既定のVOICEVOXは`http://127.0.0.1:50021`。
 
-新しいPATHが反映されていないシェルでも、補助スクリプトはwingetの標準インストール先を探索します。VOICEVOX APIの既定URLは `http://127.0.0.1:50021` です。別URLは `VOICEVOX_URL`、実行ファイルは `VIDEO_FFMPEG`、`VIDEO_FFPROBE`、`KDENLIVE_PATH`、`MLT_MELT`、`VOICEVOX_ENGINE` で上書きできます。
+## 制作の流れ
 
-## YouTube非公開アップロードの準備
+「○○の動画を作って」とCodexへ依頼する。調査・台本・映像方針・声・タイトル・サムネイル案を確認し、承認後に素材取得・音声生成・編集・検査・非公開納品へ進む。「確認不要」で承認待ちを省略できる。
 
-Google CloudでYouTube Data API v3を有効にし、OAuthクライアントの種類を「テレビと入力が限られたデバイス」にします。ダウンロードしたJSONは次のコマンドでリポジトリ外のローカル設定へコピーします。JSONやトークンをこのリポジトリへ置かないでください。
+声の指定がなければずんだもん。掛け合いで配役未指定なら、ずんだもんが説明、めたんが視聴者目線の疑問・反論を担当する。声の一覧は`video.py check --voices`で取得する。
+
+ずんだもん・めたんの声は、一人語りでも発話中だけ固定の立ち絵を表示する。音声スタイルを変更してもキャラは同じ。それ以外の声と発話間の無音では表示しない。位置・サイズは`style.json`の共通設定で決まり、案件ごとに変更しない。
+
+## コマンド
 
 ```powershell
-.\.venv\Scripts\python.exe .\tools\upload_youtube.py --install-client-secrets "$env:USERPROFILE\Downloads\client_secret_....json" --auth-only
+.\.venv\Scripts\python.exe tools/video.py check projects/<案件>
+.\.venv\Scripts\python.exe tools/video.py build projects/<案件> --quality preview
+.\.venv\Scripts\python.exe tools/video.py wait projects/<案件> --timeout 55
+.\.venv\Scripts\python.exe tools/video.py inspect projects/<案件> --at 5
+.\.venv\Scripts\python.exe tools/video.py inspect projects/<案件> --at 5 --duration 3
+.\.venv\Scripts\python.exe tools/video.py build projects/<案件> --quality final
+.\.venv\Scripts\python.exe tools/video.py wait projects/<案件>
+.\.venv\Scripts\python.exe tools/video.py deliver projects/<案件>
 ```
 
-初回とrefresh token失効時には端末に認証URLとコードが表示されます。新しい認証後のrefresh tokenはWindows DPAPIで現在のWindowsユーザーだけが復号できる形にして、既定では `%LOCALAPPDATA%\VideoAutomationEngine\youtube-oauth-token.json` に保存します。
+`build`はバックグラウンド実行。`status`/`wait`は短い状態だけを返す。実行中に同じ案件をbuildしても二重起動しない。中断や失敗後は原因を直して同じbuildを実行する。詳細ログは`work/job.log`にある。
 
-クライアント情報をファイルに保存しない場合は `YOUTUBE_CLIENT_ID` と `YOUTUBE_CLIENT_SECRET` の両方を環境変数で渡せます。JSONの別パスは `YOUTUBE_CLIENT_SECRETS_FILE`、トークンの別パスは `YOUTUBE_TOKEN_FILE` で指定できます。
+音声は本文・声・音声設定・VOICEVOXバージョンで再利用する。映像は毎回全体をレンダーする。プレビューは半分の解像度、完成版は指定解像度。既定は1920×1080、30fps。対応画面比率は16:9。
 
-完成動画名は `project.json` の `delivery.filename` で指定できます。未指定時はタイトルから生成します。YouTube設定を変える場合は次を追加します。公開状態はアップローダーが常に `private` に固定します。
+## 入力形式
+
+案件は`projects/<日付>-<slug>/`に置く。`project.json`が台本・編集指定の正本。旧形式の読み込みや自動移行は行わない。
 
 ```json
-"youtube": {
-  "title": "動画タイトル",
-  "description": "概要欄",
-  "tags": ["解説", "ニュース"],
-  "category_id": "22",
-  "made_for_kids": false
+{
+  "title": "往復の平均速度は、なぜ45キロではない？",
+  "voices": {"zunda": {"style_id": 3}, "metan": {"style_id": 2}},
+  "thumbnail": {"concept": "平均の意外性", "text": "45じゃない！"},
+  "beats": [{
+    "id": "question",
+    "title": "同じ距離を往復すると？",
+    "lines": [
+      {"id": "q1", "voice": "zunda", "text": "行きは時速六十キロ。帰りは三十キロなのだ。", "gap": 0.3},
+      {"id": "q2", "voice": "metan", "text": "平均は四十五キロ、じゃないの？", "gap": 0.6}
+    ],
+    "visuals": [
+      {"kind": "compare", "items": [{"label": "行き", "value": "60 km/h"}, {"label": "帰り", "value": "30 km/h"}]},
+      {"kind": "focus", "text": "同じ距離", "from": {"line": "q2"}, "rect": [2, 10, 96, 70]}
+    ]
+  }]
 }
 ```
 
-サムネイル方針も `project.json` に保存します。`text` はタイトルと同じ文言にせず、文字を使わない場合は空文字にできます。
+- `voices`省略時は`narrator: {style_id: 3}`。1音声なら発話の`voice`を省略できる。複数音声では各発話に指定する。
+- `voices.<名前>.settings`と発話の`settings`はVOICEVOX AudioQueryの数値設定。共通設定→声設定→発話設定の順に適用する。例：`{"speedScale": 1.05, "intonationScale": 1.1}`。
+- beatと発話の`id`は全体で一意の英数字・ハイフン・下線。台詞の修正時にIDを変える必要はない。
+- `gap`は発話後の無音秒数。既定0.3秒。beatの尺は音声実尺＋間から確定する。`duration`を指定すれば余韻を延長でき、無言のbeatでは必須。
+- `from`/`to`はbeat先頭からの秒数、または`{"line":"q2","edge":"end","offset":0.2}`。edgeはstart/end、offsetは秒数。参照できるのは同じbeatの発話。from省略はbeat先頭、to省略はbeat末尾。
+- 全文字幕は発話本文から自動生成する。改行と表示区間の分割だけを変え、字幕原稿を別に書かない。長いセリフは字幕と理解のため短い発話へ分ける。
+- `video`でwidth/height/fps、`delivery.filename`でMP4名を指定できる。未指定ファイル名はタイトルから生成する。
+
+### 映像
+
+visualsの順序が重なり順。表示時間内の要素だけを描画する。本文や素材は字幕・立ち絵を避けた共通領域へ配置される。
+
+| kind | 指定 |
+|---|---|
+| media | `path`、任意の`source_start`（秒）、`fit: contain/cover`。動画音声はミュート。短い動画は自動ループしない |
+| compare | `items`を2つ。各項目に`label`、`value`、任意の`detail`と画像`path` |
+| diagram | `nodes`に`text`、任意の`detail`と`at`。atはfrom/toと同じ時刻形式。横並びと矢印で順に出す |
+| text | `text`、任意の`size`と`color`。改行可能 |
+| focus | `text`、任意の`rect: [左, 上, 幅, 高さ]`（映像領域の百分率）と`color` |
+| custom | 案件直下の`visuals.tsx`を描画。任意の`props`を渡す |
+
+特殊な図は案件内で標準のReact/SVG/Remotionを使う。`visuals.tsx`はdefault exportのReactコンポーネントとし、`frame`（当該演出の開始からのフレーム）、`fps`、`data`（props）、`lineTimes`（同じ演出開始を原点とする発話のfrom/toフレーム）、`asset(path)`（案件内素材URL）を受け取る。フレームだけで決まる描画にし、壁時計・非決定的乱数・レンダー中の外部取得は使わない。台詞と時間表を重複記載しない。
+
+### 音
+
+beatの`audio`に素材と区間を指定する。
 
 ```json
-"thumbnail": {
-  "concept": "一目で内容が伝わる構図",
-  "subject": "動画の主役",
-  "text": "短い補完文言"
-}
+{"path":"assets/music.wav","volume":0.12,"loop":true,"duck":true,"fade_in":0.5,"fade_out":0.8}
 ```
 
-## プロジェクト成果物
+from/toは映像と同じ。`source_start`、`fade_in`、`fade_out`は秒。`volume`は倍率。`loop`と`duck`は省略時false。duckは発話前後に滑らかにBGMを下げ、無音時に戻す。SEは必要な短い区間だけ置く。音の配置とミックスはRemotionが担当する。FFmpegは素材変換・ラウドネス補正・検査に使う。完成ミックスは約−16 LUFS、true peak −1.5 dBを目標に補正し、映像ストリームはコピーする。映像の再描画・別系統の音声ミックスは行わない。
 
-各動画は `projects/<日付>-<slug>/` に保存します。
+## 保存するもの
 
-```text
-project.json              構成、シーン、shot、ナレーション、納品設定の正本
-assets/selected/          採用素材
-audio/segments/           句単位のVOICEVOX音声
-audio/narration.wav       全体ナレーション
-audio/timing.json         ffprobe実測タイミング
-subtitles/subtitles.ass   編集可能な字幕
-graphics/                 必要時のRemotion等のソースと完成クリップ
-timeline/edit.otio        Kdenliveへ渡す編集タイムライン
-timeline/edit.kdenlive    明示的に要求された場合のネイティブ編集プロジェクト
-output/preview.mp4        プレビュー
-output/<納品ファイル名>.mp4 完成動画
-output/thumbnail.jpg       YouTube用16:9サムネイル
-output/youtube-upload.json YouTube側の動画ID、非公開状態、処理結果、サムネイルAPI結果
-```
+- `project.json`、使用素材、必要な調査メモ、特殊図解のソース
+- `output/<タイトル>.mp4`、`output/thumbnail.jpg`
+- `output/final-validation.json`、納品時の`output/youtube-upload.json`
 
-`work/scene-rendering.json`、`work/scenes`、`work/render-results.json` はレンダー内部のキャッシュと再利用管理に使います。成果物や完成条件ではありません。同じ入力のシーンと完成出力は自動的に再利用されます。
+`work/`は発話音声・AudioQuery・時間表・バンドル・ジョブ状態などの再生成可能な作業データ。編集は上記のソースを直し、再buildする。OTIO、ASS、Kdenliveプロジェクトは作らない。
 
-各sceneは `shots` を持ち、各shotに `path` と `type`、必要に応じて `source_start`、`duration_seconds`、`motion` を指定します。未指定のshot尺はVOICEVOXの実測シーン尺から配分されます。案件固有値は `project.json`、字幕、音声、映像、編集のグローバル既定値は `style.json` に置きます。
+サムネイルは既存の画像生成・画像処理ツールで作り、幅640px以上・16:9のJPEGを保存する。エンジン専用のサムネイル描画基盤は持たない。
 
-## 制作コマンド
+## 非公開納品
+
+認証情報はリポジトリ外、トークンはWindows DPAPIで保護する。既存の認証を継続利用できる。
 
 ```powershell
-.\.venv\Scripts\python.exe .\tools\voicevox_synthesize.py .\projects\<project>
-.\.venv\Scripts\python.exe .\tools\build_ass.py .\projects\<project>
-.\.venv\Scripts\python.exe .\tools\render_job.py start .\projects\<project> --quality preview
-.\.venv\Scripts\python.exe .\tools\render_job.py wait .\projects\<project> --quality preview --timeout 55
-.\.venv\Scripts\python.exe .\tools\build_timeline.py .\projects\<project>
-.\.venv\Scripts\python.exe .\tools\render_job.py start .\projects\<project> --quality final
-.\.venv\Scripts\python.exe .\tools\render_job.py wait .\projects\<project> --quality final --timeout 55
-.\.venv\Scripts\python.exe .\tools\validate_project.py .\projects\<project>
-.\.venv\Scripts\python.exe .\tools\finalize_project.py .\projects\<project>
+.\.venv\Scripts\python.exe tools/upload_youtube.py --install-client-secrets "<OAuthクライアントJSON>" --auth-only
 ```
 
-`start` はFFmpeg/MLTレンダーをバックグラウンドで開始し、`wait` と `status` は短いJSON状態だけを返します。進捗ログは `work/render-jobs/` に保存されるため、Codexがレンダー中の大量出力を読み続ける必要はありません。`wait` が `running` を返した場合は時間を空けてもう一度確認します。通常はキャッシュを使い、入力が同じなら再レンダーしません。キャッシュ破損など理由がある場合だけ `start` に `--force` を付けます。
+deliverは現在の台本・完成動画と検証記録の一致、サムネイルを確認する。動画本体が同じなら再投稿せず、変更されたサムネイルだけを設定する。YouTubeのprivateとprocessingStatus=succeeded、サムネイルAPI成功を確認して納品完了とする。
 
-完成時は `output/thumbnail.jpg` も検証し、YouTubeへの非公開アップロード後に公式APIで自動設定します。動画本体を変えずにサムネイルだけ変更した時は、既存動画を再アップロードせず次を実行します。
+## 検証とバックアップ
 
 ```powershell
-.\.venv\Scripts\python.exe .\tools\upload_youtube.py .\projects\<project> --thumbnail-only
+.\.venv\Scripts\python.exe -m unittest discover -s tests -q
+Push-Location remotion
+npm.cmd run typecheck
+npm.cmd test
+Pop-Location
 ```
 
-映像確認に役立つ時だけ、次の任意ツールで代表フレームとコンタクトシートを作れます。
+テストに加えて実動画をレンダーし、必要なフレームと短い区間で読みやすさ・同期・説明との一致を確認する。素材の権利台帳や視聴分析は制作必須条件にしない。
 
-```powershell
-.\.venv\Scripts\python.exe .\tools\extract_qa_frames.py .\projects\<project>\output\preview.mp4
-```
-
-validatorは、完成動画、`project.json`、必須shot素材、ASS字幕、`audio/timing.json` と参照WAV、OTIO、`output/thumbnail.jpg` が実際に利用できることを確認します。推奨値、任意メタデータ、QA画像、レンダーキャッシュは検証対象にしません。
-
-静止画は既定では動かしません。必要なshotだけ `motion` に `zoom_in`、`zoom_out`、`pan_left`、`pan_right`、`pan_up`、`pan_down` を指定できます。動きはKdenliveと同じMLT `qtblend` Transformで処理します。実写動画は自動ループせず、素材尺が足りなければ別shotへ切り替えます。
-
-Remotionは図解やオープニングが必要な時だけ使います。
-
-掛け合い動画では、発話中の話者だけを上半身が大きく見える既定配置で映像上へ表示します。話していない側と発話間の無音では両者とも非表示です。`speaker_key` と `audio/timing.json` の実測時刻で話者を切り替え、VOICEVOX AudioQueryの音素情報から `a / i / u / e / o / n / closed` を選びます。口形間には短い中間合成を挟み、レンダーごとにLLMを使いません。位置、大きさ、補間時間、素材パスは `style.json` の `dialogue_characters` で変更できます。話者別字幕は帯なしで、ずんだもんが緑文字・白内縁・黒外縁、めたんが紫文字・白内縁・黒外縁の二重縁取りです。
-
-## Kdenliveで編集する
-
-「ファイル → OpenTimelineIOをインポート」から `timeline/edit.otio` を読み込み、字幕メニューから `subtitles/subtitles.ass` をインポートします。映像、句単位のナレーション、BGMは別トラックなので、素材差し替え、カット、字幕、BGM、音量、シーン順を編集できます。ネイティブプロジェクトが必要な場合はKdenlive自身で `.kdenlive` として保存してください。
-
-## GitHubバックアップ
-
-`projects/` はGit管理から完全に除外します。Codexが制作システムを改善した時は、検証後にシステム変更だけを `origin/main` へコミット、pushします。動画制作だけを行った時はGitHubへpushしません。
+システム変更だけを検証後にmainへコミットし、origin/mainへpushする。`projects/`、生成素材、認証情報はGit管理しない。
