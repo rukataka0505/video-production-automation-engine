@@ -77,11 +77,11 @@ powershell -ExecutionPolicy Bypass -File tools/start_voicevox.ps1
 
 ### 映像
 
-visualsの順序が重なり順。表示時間内の要素だけを描画する。本文や素材は字幕・立ち絵を避けた共通領域へ配置される。
+visualsの順序が重なり順。表示時間内の要素だけを描画する。通常の画像・動画は1920×1080全面を基準にcoverで表示し、見出し・字幕・立ち絵はその上へ重ねる。compareとdiagramだけは字幕・立ち絵を避けた安全領域へ配置する。
 
 | kind | 指定 |
 |---|---|
-| media | `path`、任意の`source_start`（秒）、`fit: contain/cover`。動画音声はミュート。短い動画は自動ループしない |
+| media | `path`、任意の`source_start`（秒）、`fit: contain/cover`（既定cover）。動画音声はミュート。短い動画は自動ループしない |
 | compare | `items`を2つ。各項目に`label`、`value`、任意の`detail`と画像`path` |
 | diagram | `nodes`に`text`、任意の`detail`と`at`。atはfrom/toと同じ時刻形式。横並びと矢印で順に出す |
 | text | `text`、任意の`size`と`color`。改行可能 |
