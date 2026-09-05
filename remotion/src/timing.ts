@@ -1,13 +1,30 @@
-export const captionParts = (text: string): string[] => {
-  const tokens = text.match(/[A-Za-z0-9][A-Za-z0-9._+:/-]*|[ァ-ヺー]+|[\s\S]/gu) ?? [];
+const captionTokens = (text: string): string[] =>
+  text.match(/[A-Za-z0-9][A-Za-z0-9._+:/-]*|[ァ-ヺー]+|[\s\S]/gu) ?? [];
+
+export const captionParts = (text: string, maxChars = 42): string[] => {
+  const limit = Math.max(1, Math.floor(maxChars));
+  const tokens = captionTokens(text);
   const parts: string[] = [];
   let current = '';
   for (const token of tokens) {
-    if (current.length + token.length > 40 && current && !/^[、。！？!?）」』]/u.test(token)) {parts.push(current); current = '';}
+    if (current.length + token.length > limit && current && !/^[、。！？!?）」』]/u.test(token)) {parts.push(current); current = '';}
     current += token;
   }
   if (current) parts.push(current);
   return parts;
+};
+
+export const captionLines = (text: string, maxCharsPerLine = 21): string => {
+  const limit = Math.max(1, Math.floor(maxCharsPerLine));
+  const tokens = captionTokens(text.replace(/\r\n/g, '\n'));
+  const lines: string[] = [''];
+  for (const token of tokens) {
+    if (token === '\n') {lines.push(''); continue;}
+    const current = lines[lines.length - 1];
+    if (current.length + token.length > limit && current && !/^[、。！？!?）」』]/u.test(token)) lines.push(token);
+    else lines[lines.length - 1] += token;
+  }
+  return lines.join('\n');
 };
 
 export function soundVolume(sound: {from: number; to: number; volume?: number; fade_in?: number; fade_out?: number; duck?: boolean}, local: number, fps: number, lines: {from: number; to: number}[], mix: {duck_volume: number; duck_seconds: number}) {

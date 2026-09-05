@@ -1,14 +1,15 @@
 import React from 'react';
 import {AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import CustomVisual from '@project-visuals';
-import {captionParts, soundVolume} from './timing';
+import {Subtitle, type SubtitleConfig} from './Subtitle';
+import {captionLines, captionParts, soundVolume} from './timing';
 
 type Event = {from: number; to: number; kind: string; [key: string]: any};
 export type Line = {id: string; beat: string; text: string; from: number; to: number; path: string; character: string | null; duration: number; mouth: {start: number; end: number; state: string}[]};
 export type FilmProps = {
   title: string; video: {width: number; height: number; fps: number}; durationInFrames: number;
   lines: Line[]; beats: {id: string; title: string; from: number; to: number; visuals: Event[]}[];
-  audio: Event[]; characters: any; mix: {duck_volume: number; duck_seconds: number}; assetBase: string;
+  audio: Event[]; characters: any; subtitles: SubtitleConfig; mix: {duck_volume: number; duck_seconds: number}; assetBase: string;
 };
 const asset = (base: string, path: string) => `${base}/project/${path.split('/').map(encodeURIComponent).join('/')}`;
 const cyan = '#6de1ec';
@@ -62,19 +63,20 @@ export const Film: React.FC<FilmProps> = (props) => {
   const used = new Set(props.lines.filter(x => x.beat === beat?.id).map(x => x.character));
   const left = used.has('zundamon') ? 490 : 120;
   const right = used.has('metan') ? 490 : 120;
-  const parts = active ? captionParts(active.text) : [];
+  const pageChars = props.subtitles.max_chars_per_line * props.subtitles.max_lines;
+  const parts = active ? captionParts(active.text, pageChars) : [];
   const fraction = active ? (frame - active.from) / Math.max(1, active.to - active.from) : 0;
   let cumulative = 0;
-  const caption = parts.find(x => {cumulative += x.length; return fraction < cumulative / active!.text.length;}) ?? '';
+  const captionPart = parts.find(x => {cumulative += x.length; return fraction < cumulative / active!.text.length;}) ?? '';
+  const caption = captionPart ? captionLines(captionPart, props.subtitles.max_chars_per_line) : '';
   const lineTimes = Object.fromEntries(props.lines.map(x => [x.id, {from: x.from, to: x.to}]));
-  const color = active?.character === 'zundamon' ? '#66e07a' : active?.character === 'metan' ? '#c995ff' : '#fff';
   const safeArea: React.CSSProperties = {position: 'absolute', top: 165, bottom: 310, left, right};
   return <AbsoluteFill style={{background: '#091321'}}>
     <div style={{position: 'absolute', width: 1920, height: 1080, transform: `scale(${width / 1920})`, transformOrigin: 'top left', color: '#f2f6fc', fontFamily: 'Yu Gothic UI, Yu Gothic, sans-serif'}}>
       {beat?.visuals.filter(x => frame >= x.from && frame < x.to).map((event, i) => <div key={`${beat.id}-${i}`} style={event.kind === 'compare' || event.kind === 'diagram' ? safeArea : fullFrame}><Visual event={event} frame={frame} base={props.assetBase} fps={fps} lineTimes={lineTimes} /></div>)}
       <div style={{position: 'absolute', top: 76, left, right, fontSize: 36, color: cyan, fontWeight: 700}}>{beat?.title}</div>
       {active?.character && <Character line={active} config={props.characters} base={props.assetBase} frame={frame} fps={fps} />}
-      {caption && <div style={{position: 'absolute', left: 170, right: 170, bottom: 55, minHeight: 150, display: 'flex', justifyContent: 'center', alignItems: 'center', textAlign: 'center', fontSize: 64, lineHeight: 1.3, fontWeight: 800, color, WebkitTextStroke: '10px #fff', paintOrder: 'stroke fill', textShadow: '4px 4px 2px #000, -4px -4px 2px #000, 4px -4px 2px #000, -4px 4px 2px #000', textWrap: 'balance', wordBreak: 'normal', lineBreak: 'strict', whiteSpace: 'pre-wrap'}}>{caption}</div>}
+      {caption && <Subtitle text={caption} character={active?.character ?? null} config={props.subtitles} />}
     </div>
     {props.lines.map(line => <Sequence key={line.id} from={line.from} durationInFrames={Math.ceil(line.duration * fps)}><Audio src={asset(props.assetBase, line.path)} /></Sequence>)}
     {props.audio.map((sound, i) => <Sequence key={i} from={sound.from} durationInFrames={sound.to - sound.from}><Audio src={asset(props.assetBase, sound.path)} startFrom={Math.round((sound.source_start ?? 0) * fps)} loop={sound.loop ?? false} loopVolumeCurveBehavior="extend" volume={local => soundVolume(sound, local, fps, props.lines, props.mix)} /></Sequence>)}

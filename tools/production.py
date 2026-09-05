@@ -198,6 +198,7 @@ def prepare(root: Path, project: dict, client=None) -> dict:
                 raise ValueError(f"立ち絵がありません: {key}/{state}。install_dialogue_characters.pyを実行してください")
     result = {"title": project["title"], "video": video, "durationInFrames": frame(cursor, fps),
               "lines": records, "beats": beats, "audio": audio, "characters": characters,
+              "subtitles": style["subtitles"],
               "mix": style["audio"], "speech": {"generated": generated, "reused": reused}}
     write_json(root / "work" / "timing.json", result)
     return result
