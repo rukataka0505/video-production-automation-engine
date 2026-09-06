@@ -100,8 +100,11 @@ def prepare(root: Path, project: dict, client=None) -> dict:
             raise ValueError(f"{key}は整数にしてください")
     if video["width"] % 2 or video["height"] % 2:
         raise ValueError("映像サイズは偶数にしてください")
-    if abs(video["width"] / video["height"] - 16 / 9) > 0.01:
-        raise ValueError("現在の共通レイアウトは16:9です")
+    if not any(abs(video["width"] / video["height"] - ratio) < 0.01 for ratio in (16 / 9, 9 / 16)):
+        raise ValueError("共通レイアウトは16:9または9:16です")
+    if video["height"] > video["width"]:
+        for section in ("subtitles", "characters"):
+            style[section] = {**style[section], **style["portrait"][section]}
     fps = int(video["fps"])
     client = client or Voicevox()
     cursor = 0.0
@@ -237,8 +240,12 @@ def validate_thumbnail(root: Path) -> None:
     if not path.is_file() or path.read_bytes()[:3] != b"\xff\xd8\xff":
         raise ValueError("output/thumbnail.jpgが必要です")
     info = ffprobe(path)["streams"][0]
-    if info["width"] < 640 or abs(info["width"] / info["height"] - 16 / 9) > 0.01:
-        raise ValueError("サムネイルは幅640px以上、16:9にしてください")
+    project = read_json(root / "project.json")
+    video = {**read_json(REPO_ROOT / "style.json")["video"], **project.get("video", {})}
+    portrait = video["height"] > video["width"]
+    ratio = 9 / 16 if portrait else 16 / 9
+    if info["height" if portrait else "width"] < 640 or abs(info["width"] / info["height"] - ratio) > 0.01:
+        raise ValueError("サムネイルは動画と同じ画面比率で、横動画は幅640px以上、縦動画は高さ640px以上にしてください")
 
 
 def normalize_loudness(source: Path, output: Path, duration: float) -> None:

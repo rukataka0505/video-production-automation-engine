@@ -41,7 +41,15 @@ powershell -ExecutionPolicy Bypass -File tools/start_voicevox.ps1
 
 `build`はバックグラウンド実行。`status`/`wait`は短い状態だけを返す。実行中に同じ案件をbuildしても二重起動しない。中断や失敗後は原因を直して同じbuildを実行する。詳細ログは`work/job.log`にある。
 
-音声は本文・声・音声設定・VOICEVOXバージョンで再利用する。映像は毎回全体をレンダーする。プレビューは半分の解像度、完成版は指定解像度。既定は1920×1080、30fps。対応画面比率は16:9。
+音声は本文・声・音声設定・VOICEVOXバージョンで再利用する。映像は毎回全体をレンダーする。プレビューは半分の解像度、完成版は指定解像度。既定は1920×1080、30fps。対応画面比率は16:9と9:16。
+
+## YouTube Shorts
+
+「○○のShortsを作って」と依頼する。構成・編集の共通Skillに加えて [shorts Skill](.agents/skills/shorts/SKILL.md) を使う。通常動画の制作方針と承認手順は共通。
+
+project.jsonに `"video": {"width": 1080, "height": 1920, "fps": 30}` を指定するだけで、同じRemotion・VOICEVOX・CLIを使い、完成版1080×1920、プレビュー540×960を出力する。省略時は従来の1920×1080。縦動画の字幕と立ち絵はstyle.jsonのportraitから共通設定を適用し、比較・図解を上下並びにする。縦のtextは図解と同じ安全領域内、media・focus・customは全画面。customは縦画面用の配置を案件内で設計する。
+
+Shortsは完成実尺3分以内に構成する。縦レイアウト自体は長尺でも使用でき、尺で映像を自動カットしない。納品時のShorts分類はYouTube側が行う。thumbnail.jpgは通常1080×1920で作り、既存のサムネイルAPI結果まで確認する。
 
 ## 入力形式
 
@@ -77,13 +85,13 @@ powershell -ExecutionPolicy Bypass -File tools/start_voicevox.ps1
 
 ### 映像
 
-visualsの順序が重なり順。表示時間内の要素だけを描画する。通常の画像・動画は1920×1080全面を基準にcoverで表示し、見出し・字幕・立ち絵はその上へ重ねる。compareとdiagramだけは字幕・立ち絵を避けた安全領域へ配置する。
+visualsの順序が重なり順。表示時間内の要素だけを描画する。通常の画像・動画は横1920×1080、縦1080×1920全面を基準にcoverで表示し、見出し・字幕・立ち絵はその上へ重ねる。compareとdiagramは字幕・立ち絵を避けた安全領域へ配置する。縦動画ではtextも同じ領域を使う。
 
 | kind | 指定 |
 |---|---|
 | media | `path`、任意の`source_start`（秒）、`fit: contain/cover`（既定cover）。動画音声はミュート。短い動画は自動ループしない |
 | compare | `items`を2つ。各項目に`label`、`value`、任意の`detail`と画像`path` |
-| diagram | `nodes`に`text`、任意の`detail`と`at`。atはfrom/toと同じ時刻形式。横並びと矢印で順に出す |
+| diagram | `nodes`に`text`、任意の`detail`と`at`。atはfrom/toと同じ時刻形式。横動画は横並び、縦動画は上下並びと矢印で順に出す |
 | text | `text`、任意の`size`と`color`。改行可能 |
 | focus | `text`、任意の`rect: [左, 上, 幅, 高さ]`（映像領域の百分率）と`color` |
 | custom | 案件直下の`visuals.tsx`を描画。任意の`props`を渡す |
@@ -108,7 +116,7 @@ from/toは映像と同じ。`source_start`、`fade_in`、`fade_out`は秒。`vol
 
 `work/`は発話音声・AudioQuery・時間表・バンドル・ジョブ状態などの再生成可能な作業データ。編集は上記のソースを直し、再buildする。OTIO、ASS、Kdenliveプロジェクトは作らない。
 
-サムネイルは既存の画像生成・画像処理ツールで作り、幅640px以上・16:9のJPEGを保存する。エンジン専用のサムネイル描画基盤は持たない。
+サムネイルは既存の画像生成・画像処理ツールで作り、横は幅640px以上・16:9、縦は高さ640px以上・9:16のJPEGを保存する。エンジン専用のサムネイル描画基盤は持たない。
 
 ## 非公開納品
 

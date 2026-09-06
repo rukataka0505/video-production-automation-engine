@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from common import write_json
-from production import load_project, prepare, resolve_time, timed_event, normalize_loudness
+from production import load_project, prepare, resolve_time, timed_event, normalize_loudness, validate_thumbnail, validate_output
 from speech import Voicevox, synthesize
 from video import state, start, delivery_check
 
@@ -69,6 +69,52 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(self.client.identity(2)["character"], "metan")
         self.assertIsNone(self.client.identity(8)["character"])
         with self.assertRaises(ValueError): self.client.identity(999)
+
+    def test_portrait_reuses_speech_and_preserves_landscape_defaults(self):
+        p = sample()
+        landscape = prepare(self.root, self.load(p), self.client)
+        p["video"] = {"width": 1080, "height": 1920, "fps": 30}
+        portrait = prepare(self.root, self.load(p), self.client)
+        self.assertEqual(portrait["video"], p["video"])
+        self.assertEqual(portrait["speech"], {"generated": 0, "reused": 1})
+        self.assertEqual(portrait["lines"], landscape["lines"])
+        self.assertLess(portrait["subtitles"]["max_chars_per_line"], landscape["subtitles"]["max_chars_per_line"])
+        self.assertLess(portrait["characters"]["height_percent"], landscape["characters"]["height_percent"])
+        del p["video"]
+        again = prepare(self.root, self.load(p), self.client)
+        self.assertEqual(again["characters"], landscape["characters"])
+        self.assertEqual(again["subtitles"], landscape["subtitles"])
+
+    def test_unsupported_ratio_fails_before_speech(self):
+        p = sample(); p["video"] = {"width": 1080, "height": 1080}
+        with self.assertRaisesRegex(ValueError, "16:9"):
+            prepare(self.root, self.load(p), self.client)
+        self.assertEqual(self.client.calls, [])
+
+    def test_thumbnail_matches_project_orientation(self):
+        (self.root / "output").mkdir()
+        (self.root / "output/thumbnail.jpg").write_bytes(b"\xff\xd8\xff")
+        for width, height in ((1920, 1080), (1080, 1920)):
+            p = sample(); p["video"] = {"width": width, "height": height}
+            self.load(p)
+            with patch("production.ffprobe", return_value={"streams": [{"width": width, "height": height}]}):
+                validate_thumbnail(self.root)
+            with patch("production.ffprobe", return_value={"streams": [{"width": height, "height": width}]}):
+                with self.assertRaises(ValueError): validate_thumbnail(self.root)
+
+    def test_portrait_output_checks_preview_and_final_dimensions(self):
+        p = sample(); p["video"] = {"width": 1080, "height": 1920}
+        timing = prepare(self.root, self.load(p), self.client)
+        output = self.root / "out.mp4"; output.write_bytes(b"fixture")
+        for quality, width, height in (("preview", 540, 960), ("final", 1080, 1920)):
+            info = {"format": {"duration": timing["durationInFrames"] / 30}, "streams": [
+                {"codec_type": "video", "width": width, "height": height, "avg_frame_rate": "30/1"},
+                {"codec_type": "audio"}]}
+            with patch("production.ffprobe", return_value=info), patch("production.run"):
+                self.assertTrue(validate_output(self.root, p, timing, output, quality)["passed"])
+                info["streams"][0]["width"] = height
+                with self.assertRaisesRegex(ValueError, "解像度"):
+                    validate_output(self.root, p, timing, output, quality)
 
     def test_speech_cache_tracks_content_voice_settings_and_version(self):
         cache = self.root / "audio"

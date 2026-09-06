@@ -81,6 +81,19 @@
       }
     }
   },
+  "portrait": {
+    "subtitles": {
+      "font_size": 60,
+      "bottom": 480,
+      "side_margin": 150,
+      "min_height": 170,
+      "max_chars_per_line": 12
+    },
+    "characters": {
+      "height_percent": 24,
+      "bottom_percent": 1
+    }
+  },
   "youtube": {
     "category_id": "22",
     "made_for_kids": false
