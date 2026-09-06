@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File tools/start_voicevox.ps1
 
 「○○のShortsを作って」と依頼する。構成・編集の共通Skillに加えて [shorts Skill](.agents/skills/shorts/SKILL.md) を使う。通常動画の制作方針と承認手順は共通。
 
-project.jsonに `"video": {"width": 1080, "height": 1920, "fps": 30}` を指定するだけで、同じRemotion・VOICEVOX・CLIを使い、完成版1080×1920、プレビュー540×960を出力する。省略時は従来の1920×1080。縦動画の字幕と立ち絵はstyle.jsonのportraitから共通設定を適用し、比較・図解を上下並びにする。縦のtextは図解と同じ安全領域内、media・focus・customは全画面。customは縦画面用の配置を案件内で設計する。
+project.jsonに `"video": {"width": 1080, "height": 1920, "fps": 30}` を指定するだけで、同じRemotion・VOICEVOX・CLIを使い、完成版1080×1920、プレビュー540×960を出力する。省略時は従来の1920×1080。縦動画の字幕と立ち絵はstyle.jsonのportraitから共通設定を適用する。
 
 Shortsは完成実尺3分以内に構成する。縦レイアウト自体は長尺でも使用でき、尺で映像を自動カットしない。納品時のShorts分類はYouTube側が行う。thumbnail.jpgは通常1080×1920で作り、既存のサムネイルAPI結果まで確認する。
 
@@ -62,14 +62,13 @@ Shortsは完成実尺3分以内に構成する。縦レイアウト自体は長�
   "thumbnail": {"concept": "平均の意外性", "text": "45じゃない！"},
   "beats": [{
     "id": "question",
-    "title": "同じ距離を往復すると？",
     "lines": [
       {"id": "q1", "voice": "zunda", "text": "行きは時速六十キロ。帰りは三十キロなのだ。", "gap": 0.3},
       {"id": "q2", "voice": "metan", "text": "平均は四十五キロ、じゃないの？", "gap": 0.6}
     ],
     "visuals": [
-      {"kind": "compare", "items": [{"label": "行き", "value": "60 km/h"}, {"label": "帰り", "value": "30 km/h"}]},
-      {"kind": "focus", "text": "同じ距離", "from": {"line": "q2"}, "rect": [2, 10, 96, 70]}
+      {"kind": "media", "path": "assets/outbound.mp4", "to": {"line": "q2"}},
+      {"kind": "media", "path": "assets/return.jpg", "from": {"line": "q2"}}
     ]
   }]
 }
@@ -85,18 +84,11 @@ Shortsは完成実尺3分以内に構成する。縦レイアウト自体は長�
 
 ### 映像
 
-visualsの順序が重なり順。表示時間内の要素だけを描画する。通常の画像・動画は横1920×1080、縦1080×1920全面を基準にcoverで表示し、見出し・字幕・立ち絵はその上へ重ねる。compareとdiagramは字幕・立ち絵を避けた安全領域へ配置する。縦動画ではtextも同じ領域を使う。
+visualsの順序が重なり順。表示時間内の要素だけを描画する。画像・動画は横1920×1080、縦1080×1920全面を基準にcoverで表示し、字幕と立ち絵はその上へ重ねる。
 
 | kind | 指定 |
 |---|---|
 | media | `path`、任意の`source_start`（秒）、`fit: contain/cover`（既定cover）。動画音声はミュート。短い動画は自動ループしない |
-| compare | `items`を2つ。各項目に`label`、`value`、任意の`detail`と画像`path` |
-| diagram | `nodes`に`text`、任意の`detail`と`at`。atはfrom/toと同じ時刻形式。横動画は横並び、縦動画は上下並びと矢印で順に出す |
-| text | `text`、任意の`size`と`color`。改行可能 |
-| focus | `text`、任意の`rect: [左, 上, 幅, 高さ]`（映像領域の百分率）と`color` |
-| custom | 案件直下の`visuals.tsx`を描画。任意の`props`を渡す |
-
-特殊な図は案件内で標準のReact/SVG/Remotionを使う。`visuals.tsx`はdefault exportのReactコンポーネントとし、`frame`（当該演出の開始からのフレーム）、`fps`、`data`（props）、`lineTimes`（同じ演出開始を原点とする発話のfrom/toフレーム）、`asset(path)`（案件内素材URL）を受け取る。フレームだけで決まる描画にし、壁時計・非決定的乱数・レンダー中の外部取得は使わない。台詞と時間表を重複記載しない。
 
 ### 音
 
@@ -110,7 +102,7 @@ from/toは映像と同じ。`source_start`、`fade_in`、`fade_out`は秒。`vol
 
 ## 保存するもの
 
-- `project.json`、使用素材、必要な調査メモ、特殊図解のソース
+- `project.json`、使用素材、必要な調査メモ
 - `output/<タイトル>.mp4`、`output/thumbnail.jpg`
 - `output/final-validation.json`、納品時の`output/youtube-upload.json`
 

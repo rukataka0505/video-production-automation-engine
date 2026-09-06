@@ -44,13 +44,14 @@ class FakeVoicevox(Voicevox):
 
 def sample():
     return {"title": "試験", "beats": [{"id": "b", "lines": [{"id": "l", "text": "これは試験です。"}],
-              "visuals": [{"kind": "text", "text": "試験"}]}]}
+              "visuals": [{"kind": "media", "path": "frame.jpg"}]}]}
 
 
 class ProductionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        (self.root / "frame.jpg").write_bytes(b"fixture")
         self.client = FakeVoicevox()
     def tearDown(self):
         self.temp.cleanup()
@@ -159,8 +160,8 @@ class ProductionTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.load(p)
 
     def test_invalid_event_media_and_duration_fail(self):
-        for visual in [{"kind": "media", "path": "missing.mp4"}, {"kind": "text", "text": "x", "from": 999},
-                       {"kind": "text", "text": "x", "from": {"line": "missing"}}, {"kind": "custom"}]:
+        for visual in [{"kind": "media", "path": "missing.mp4"}, {"kind": "media", "path": "frame.jpg", "from": 999},
+                       {"kind": "media", "path": "frame.jpg", "from": {"line": "missing"}}, {"kind": "text", "text": "x"}]:
             p = sample(); p["beats"][0]["visuals"] = [visual]
             with self.assertRaises(ValueError): prepare(self.root, self.load(p), self.client)
         p = sample(); p["beats"][0]["duration"] = .01

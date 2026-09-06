@@ -1,6 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
-import CustomVisual from '@project-visuals';
+import {AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig} from 'remotion';
 import {Subtitle, type SubtitleConfig} from './Subtitle';
 import {captionLines, captionParts, soundVolume} from './timing';
 
@@ -8,41 +7,16 @@ type Event = {from: number; to: number; kind: string; [key: string]: any};
 export type Line = {id: string; beat: string; text: string; from: number; to: number; path: string; character: string | null; duration: number; mouth: {start: number; end: number; state: string}[]};
 export type FilmProps = {
   title: string; video: {width: number; height: number; fps: number}; durationInFrames: number;
-  lines: Line[]; beats: {id: string; title: string; from: number; to: number; visuals: Event[]}[];
+  lines: Line[]; beats: {id: string; from: number; to: number; visuals: Event[]}[];
   audio: Event[]; characters: any; subtitles: SubtitleConfig; mix: {duck_volume: number; duck_seconds: number}; assetBase: string;
 };
 const asset = (base: string, path: string) => `${base}/project/${path.split('/').map(encodeURIComponent).join('/')}`;
-const cyan = '#6de1ec';
 const fullFrame: React.CSSProperties = {position: 'absolute', inset: 0};
 
-const Visual: React.FC<{event: Event; frame: number; base: string; fps: number; lineTimes: Record<string, {from: number; to: number}>}> = ({event: e, frame, base, fps, lineTimes}) => {
-  const {width, height} = useVideoConfig();
-  const portrait = height > width;
-  const elapsed = frame - e.from;
-  const reveal = interpolate(elapsed, [0, Math.max(1, fps * .2)], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
-  if (e.kind === 'media') return <div style={fullFrame}>{e.media === 'video'
+const Visual: React.FC<{event: Event; base: string; fps: number}> = ({event: e, base, fps}) => {
+  return <div style={fullFrame}>{e.media === 'video'
     ? <Sequence from={e.from} durationInFrames={e.to - e.from} layout="none"><OffthreadVideo src={asset(base, e.path)} startFrom={Math.round((e.source_start ?? 0) * fps)} muted style={{width: '100%', height: '100%', objectFit: e.fit ?? 'cover'}} /></Sequence>
     : <Img src={asset(base, e.path)} style={{width: '100%', height: '100%', objectFit: e.fit ?? 'cover'}} />}</div>;
-  if (e.kind === 'compare') return <div style={{...fullFrame, display: 'flex', flexDirection: portrait ? 'column' : 'row', gap: 28, alignItems: portrait ? 'stretch' : 'center', justifyContent: 'center'}}>{e.items.map((x: any, i: number) => <div key={i} style={{flex: portrait ? undefined : 1, minWidth: 0, padding: 30, border: '2px solid #3b526a', borderRadius: 18, background: '#122034', textAlign: 'center'}}>
-    {x.path && <Img src={asset(base, x.path)} style={{width: '100%', height: portrait ? 150 : 230, objectFit: 'contain'}} />}
-    <div style={{fontSize: 32, color: '#c6d3e2'}}>{x.label}</div><div style={{fontSize: 72, fontWeight: 800, color: i ? '#ffd27a' : cyan, marginTop: 20}}>{x.value}</div>
-    {x.detail && <div style={{fontSize: 27, marginTop: 20}}>{x.detail}</div>}
-  </div>)}</div>;
-  if (e.kind === 'diagram') return <div style={{...fullFrame, display: 'flex', flexDirection: portrait ? 'column' : 'row', justifyContent: 'center', alignItems: portrait ? 'stretch' : 'center', gap: 14}}>{e.nodes.map((node: any, i: number) => <React.Fragment key={i}>
-    {i > 0 && <div style={{color: cyan, fontSize: 38, textAlign: 'center', opacity: frame >= node.from ? 1 : 0}}>{portrait ? '↓' : '→'}</div>}
-    <div style={{flex: portrait ? undefined : 1, padding: '34px 18px', border: '2px solid #4c7595', borderRadius: 16, background: '#152a40', opacity: frame >= node.from ? 1 : 0}}>
-      <div style={{fontSize: 32, textAlign: 'center', fontWeight: 700, whiteSpace: 'pre-line'}}>{node.text}</div>
-      {node.detail && <div style={{fontSize: 27, color: cyan, textAlign: 'center', marginTop: 20, whiteSpace: 'pre-line'}}>{node.detail}</div>}
-    </div></React.Fragment>)}</div>;
-  if (e.kind === 'focus') {
-    const rect = e.rect ?? [5, 10, 90, 65];
-    return <div style={{position: 'absolute', left: `${rect[0]}%`, top: `${rect[1]}%`, width: `${rect[2]}%`, height: `${rect[3]}%`, border: `5px solid ${e.color ?? '#ffd27a'}`, borderRadius: 12, opacity: reveal}}>
-      <span style={{position: 'absolute', left: 15, top: -42, padding: '6px 18px', background: '#091321', color: e.color ?? '#ffd27a', fontSize: 30}}>{e.text}</span>
-    </div>;
-  }
-  if (e.kind === 'text') return <div style={{...fullFrame, display: 'flex', justifyContent: 'center', alignItems: 'center', textAlign: 'center', fontSize: e.size ?? 62, lineHeight: 1.5, fontWeight: 800, color: e.color ?? '#fff', whiteSpace: 'pre-line', opacity: reveal}}>{e.text}</div>;
-  if (e.kind === 'custom') return <CustomVisual frame={elapsed} fps={fps} data={e.props ?? {}} lineTimes={Object.fromEntries(Object.entries(lineTimes).map(([id, t]) => [id, {from: t.from - e.from, to: t.to - e.from}]))} asset={(path: string) => asset(base, path)} />;
-  return null;
 };
 
 const Character: React.FC<{line: Line; config: any; base: string; frame: number; fps: number}> = ({line, config, base, frame, fps}) => {
@@ -63,21 +37,15 @@ export const Film: React.FC<FilmProps> = (props) => {
   const portrait = height > width;
   const beat = props.beats.find(x => frame >= x.from && frame < x.to);
   const active = props.lines.find(x => frame >= x.from && frame < x.to);
-  const used = new Set(props.lines.filter(x => x.beat === beat?.id).map(x => x.character));
-  const left = portrait ? 90 : used.has('zundamon') ? 490 : 120;
-  const right = portrait ? 180 : used.has('metan') ? 490 : 120;
   const pageChars = props.subtitles.max_chars_per_line * props.subtitles.max_lines;
   const parts = active ? captionParts(active.text, pageChars) : [];
   const fraction = active ? (frame - active.from) / Math.max(1, active.to - active.from) : 0;
   let cumulative = 0;
   const captionPart = parts.find(x => {cumulative += x.length; return fraction < cumulative / active!.text.length;}) ?? '';
   const caption = captionPart ? captionLines(captionPart, props.subtitles.max_chars_per_line) : '';
-  const lineTimes = Object.fromEntries(props.lines.map(x => [x.id, {from: x.from, to: x.to}]));
-  const safeArea: React.CSSProperties = {position: 'absolute', top: portrait ? 290 : 165, bottom: portrait ? 700 : 310, left, right};
   return <AbsoluteFill style={{background: '#091321'}}>
     <div style={{position: 'absolute', width: portrait ? 1080 : 1920, height: portrait ? 1920 : 1080, transform: `scale(${width / (portrait ? 1080 : 1920)})`, transformOrigin: 'top left', color: '#f2f6fc', fontFamily: 'Yu Gothic UI, Yu Gothic, sans-serif'}}>
-      {beat?.visuals.filter(x => frame >= x.from && frame < x.to).map((event, i) => <div key={`${beat.id}-${i}`} style={event.kind === 'compare' || event.kind === 'diagram' || (portrait && event.kind === 'text') ? safeArea : fullFrame}><Visual event={event} frame={frame} base={props.assetBase} fps={fps} lineTimes={lineTimes} /></div>)}
-      <div style={{position: 'absolute', top: portrait ? 180 : 76, left, right, fontSize: portrait ? 44 : 36, color: cyan, fontWeight: 700}}>{beat?.title}</div>
+      {beat?.visuals.filter(x => frame >= x.from && frame < x.to).map((event, i) => <Visual key={`${beat.id}-${i}`} event={event} base={props.assetBase} fps={fps} />)}
       {active?.character && <Character line={active} config={props.characters} base={props.assetBase} frame={frame} fps={fps} />}
       {caption && <Subtitle text={caption} character={active?.character ?? null} config={props.subtitles} />}
     </div>

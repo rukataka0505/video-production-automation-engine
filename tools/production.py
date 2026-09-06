@@ -136,46 +136,22 @@ def prepare(root: Path, project: dict, client=None) -> dict:
         visuals = []
         for event in beat["visuals"]:
             kind = event.get("kind")
-            if kind not in {"media", "compare", "diagram", "focus", "text", "custom"}:
+            if kind != "media":
                 raise ValueError(f"{beat['id']}: 未対応のvisual.kind: {kind}")
             item = timed_event(event, lines, duration, cursor, fps)
-            if kind == "media":
-                item["path"] = asset(root, event.get("path"))
-                item["media"] = "image" if Path(item["path"]).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"} else "video"
-                if item["media"] == "video":
-                    source = number(item.get("source_start", 0), "source_start")
-                    info = ffprobe(root / item["path"])
-                    if not any(s["codec_type"] == "video" for s in info["streams"]):
-                        raise ValueError(f"動画ストリームがありません: {item['path']}")
-                    if source + (item["to"] - item["from"]) / fps > float(info["format"]["duration"]) + 1 / fps:
-                        raise ValueError(f"{beat['id']}: 動画素材の尺が足りません: {item['path']}")
-            if kind == "compare":
-                if len(item.get("items", [])) != 2:
-                    raise ValueError("compareにはitemsが2つ必要です")
-                if any(not isinstance(x.get(k), str) for x in item["items"] for k in ("label", "value")):
-                    raise ValueError("compareの各項目に文字列のlabelとvalueが必要です")
-                item["items"] = [{**x, **({"path": asset(root, x["path"])} if "path" in x else {})} for x in item["items"]]
-            if kind in {"text", "focus"} and not isinstance(item.get("text"), str):
-                raise ValueError(f"{kind}.textが必要です")
-            if kind == "diagram":
-                if not item.get("nodes"):
-                    raise ValueError("diagram.nodesが必要です")
-                if any(not isinstance(node.get("text"), str) for node in item["nodes"]):
-                    raise ValueError("diagramの各nodeにtextが必要です")
-                item["nodes"] = [{**node, "from": frame(cursor + resolve_time(node.get("at", event.get("from", 0)), lines, duration), fps)} for node in item["nodes"]]
-                if any(not item["from"] <= node["from"] < item["to"] for node in item["nodes"]):
-                    raise ValueError("図の段階表示時刻が表示区間の範囲外です")
-            if kind == "custom" and not (root / "visuals.tsx").is_file():
-                raise ValueError("customには案件直下のvisuals.tsxが必要です")
-            if "rect" in item:
-                if not isinstance(item["rect"], list) or len(item["rect"]) != 4:
-                    raise ValueError("rectは[左, 上, 幅, 高さ]です")
-                for value in item["rect"]:
-                    number(value, "rect")
+            item["path"] = asset(root, event.get("path"))
+            item["media"] = "image" if Path(item["path"]).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"} else "video"
+            if item["media"] == "video":
+                source = number(item.get("source_start", 0), "source_start")
+                info = ffprobe(root / item["path"])
+                if not any(s["codec_type"] == "video" for s in info["streams"]):
+                    raise ValueError(f"動画ストリームがありません: {item['path']}")
+                if source + (item["to"] - item["from"]) / fps > float(info["format"]["duration"]) + 1 / fps:
+                    raise ValueError(f"{beat['id']}: 動画素材の尺が足りません: {item['path']}")
             if "fit" in item and item["fit"] not in {"contain", "cover"}:
                 raise ValueError("fitはcontainまたはcoverです")
             visuals.append(item)
-        beats.append({"id": beat["id"], "title": beat.get("title", ""), "from": first, "to": end, "visuals": visuals})
+        beats.append({"id": beat["id"], "from": first, "to": end, "visuals": visuals})
         for sound in beat.get("audio", []):
             item = timed_event(sound, lines, duration, cursor, fps)
             for key in ("loop", "duck"):

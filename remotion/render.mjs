@@ -35,11 +35,9 @@ const server = http.createServer((req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 try {
   props.assetBase = `http://127.0.0.1:${server.address().port}`;
-  const custom = path.join(project, 'visuals.tsx');
   const serveUrl = await bundle({entryPoint: path.join(here, 'src/index.ts'), publicDir: null,
     outDir: path.join(project, 'work/bundle'),
     webpackOverride: config => ({...config, resolve: {...config.resolve,
-      alias: {...config.resolve?.alias, '@project-visuals': fs.existsSync(custom) ? custom : path.join(here, 'src/EmptyVisual.tsx')},
       modules: [path.join(here, 'node_modules'), 'node_modules']}})});
   const composition = await selectComposition({serveUrl, id: 'Film', inputProps: props, logLevel: 'error'});
   await renderMedia({composition, serveUrl, inputProps: props, outputLocation: path.resolve(outputArg),
