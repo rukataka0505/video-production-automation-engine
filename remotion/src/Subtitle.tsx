@@ -24,15 +24,17 @@ export type SubtitleConfig = {
 
 export const Subtitle: React.FC<{text: string; character: string | null; config: SubtitleConfig}> = ({text, character, config}) => {
   const palette = (character && config.speaker_styles[character]) || config.default_style;
+  const hasInnerOutline = palette.inner_outline_color.toLowerCase() !== palette.text_color.toLowerCase();
+  const innerOutlineWidth = hasInnerOutline ? config.inner_outline_width : 0;
   const common: React.CSSProperties = {
     position: 'absolute', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center',
     textAlign: 'center', fontFamily: config.font_family, fontSize: config.font_size,
     fontWeight: config.font_weight, lineHeight: config.line_height, color: palette.text_color,
     whiteSpace: 'pre', wordBreak: 'normal', lineBreak: 'strict', paintOrder: 'stroke fill',
   };
-  const outerExtent = config.inner_outline_width + config.outer_outline_width;
+  const outerExtent = innerOutlineWidth + config.outer_outline_width;
   return <div style={{position: 'absolute', left: config.side_margin, right: config.side_margin, bottom: config.bottom, minHeight: config.min_height}}>
     <div aria-hidden style={{...common, WebkitTextStroke: `${outerExtent * 2}px ${palette.outer_outline_color}`}}>{text}</div>
-    <div style={{...common, WebkitTextStroke: `${config.inner_outline_width * 2}px ${palette.inner_outline_color}`}}>{text}</div>
+    <div style={{...common, WebkitTextStroke: hasInnerOutline ? `${innerOutlineWidth * 2}px ${palette.inner_outline_color}` : undefined}}>{text}</div>
   </div>;
 };
