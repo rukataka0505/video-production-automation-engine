@@ -1,0 +1,45 @@
+name: RX-only observer build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test capture writer
+        run: swift test --package-path Core
+      - name: Check source configuration
+        run: python3 ci/verify_source.py
+      - name: Verify Swift writer with independent Python reader
+        run: |
+          swift run --package-path Core CaptureFixture "$RUNNER_TEMP/observer-fixture"
+          python3 ci/verify_fixture.py "$RUNNER_TEMP/observer-fixture"
+      - name: Generate and build unsigned iPhone app
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild build -project Neo2Observer.xcodeproj -scheme Neo2Observer \
+            -sdk iphoneos -configuration Release -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" OBSERVER_SOURCE_COMMIT="$GITHUB_SHA"
+      - name: Package unsigned artifact with source identity
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/Neo2Observer.app Payload/
+          git rev-parse HEAD > source-commit.txt
+          zip -qry Neo2Observer-unsigned.ipa Payload
+          shasum -a 256 Neo2Observer-unsigned.ipa > artifact-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Neo2Observer-unsigned
+          path: |
+            Neo2Observer-unsigned.ipa
+            source-commit.txt
+            artifact-sha256.txt
+          if-no-files-found: error
+          retention-days: 14
