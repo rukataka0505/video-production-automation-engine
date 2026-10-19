@@ -1,7 +1,10 @@
-# Neo2 RX Observer — source preparation
+# Neo2 RX Observer
 
-This distinct iPhone app records incoming accessory bytes. **The iOS build,
-owner signing, installation and hardware behavior are not verified yet.**
+This distinct iPhone app records incoming accessory bytes. Native Swift tests,
+Swift/Python file interoperability and the unsigned iPhone build passed in
+[CI](https://github.com/rukataka0505/video-production-automation-engine/actions/runs/39210050289)
+for source commit `353a3a5ed59a24d059686f869235b8933025081a`.
+**Owner signing, installation and hardware behavior are not verified yet.**
 It does not unlock Manual mode and is not a firmware/control implementation.
 
 The app has no command profiles, transmit API, bootstrap, serial poll,
@@ -17,12 +20,17 @@ configuration profiles are included. This app is a separate observation surface.
 
 ## Build status and CI
 
-This folder is a self-contained repository candidate. A source ZIP can be made
+This folder is a self-contained repository. A source ZIP can be made
 without any aircraft logs, individual IDs, account credentials or the parent
 workspace. `.github/workflows/build.yml` runs writer tests, the source guard,
 an actual Swift-writer/Python-reader fixture check and an unsigned iPhone build.
 The workflow has read-only repository permissions and does not sign or deploy.
-No CI run has been dispatched by merely preparing these files.
+The three native writer tests, source guard, actual cross-language fixture and
+unsigned arm64 iPhone build passed on 2026-10-19. The CI artifact includes the
+IPA, source commit and its SHA256. The original source-only preparation archive
+predates that successful build; later documentation updates do not alter the
+compiled Swift code. Repository contents were replaced with the owner's consent;
+the retired project remains in Git history.
 
 ```sh
 swift test --package-path Core
