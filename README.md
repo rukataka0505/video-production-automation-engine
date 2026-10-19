@@ -1,135 +1,95 @@
-# Codex動画制作エンジン
+# Neo2 RX Observer — source preparation
 
-Codexが調査・脚本・素材・演出を判断し、ローカルのVOICEVOXとRemotionで動画にする。編集は台本や素材を修正して再生成する。
+This distinct iPhone app records incoming accessory bytes. **The iOS build,
+owner signing, installation and hardware behavior are not verified yet.**
+It does not unlock Manual mode and is not a firmware/control implementation.
 
-## セットアップ
+The app has no command profiles, transmit API, bootstrap, serial poll,
+keepalive, network client, automatic connection or settings controls. It opens
+only the selected accessory's `com.dji.logiclink` input stream after Start.
+This establishes absence of application-level writes in the reviewed source;
+it does not measure MFi/system traffic or prove that an uninitialised RC will
+deliver data. Zero received bytes is an inconclusive observation.
 
-必要なのはPython 3.13、Node.js、FFmpeg/ffprobe、VOICEVOX。Python側は標準ライブラリだけを使う。
+The protocol string is grounded in the previously saved iPhone Fly session and
+the transport research in this workspace. No FreeFCC implementation code or
+configuration profiles are included. This app is a separate observation surface.
 
-```powershell
-py -3.13 -m venv .venv
-Push-Location remotion
-npm.cmd ci
-Pop-Location
-powershell -ExecutionPolicy Bypass -File tools/start_voicevox.ps1
-.\.venv\Scripts\python.exe tools/install_dialogue_characters.py
-.\.venv\Scripts\python.exe tools/video.py check
+## Build status and CI
+
+This folder is a self-contained repository candidate. A source ZIP can be made
+without any aircraft logs, individual IDs, account credentials or the parent
+workspace. `.github/workflows/build.yml` runs writer tests, the source guard,
+an actual Swift-writer/Python-reader fixture check and an unsigned iPhone build.
+The workflow has read-only repository permissions and does not sign or deploy.
+No CI run has been dispatched by merely preparing these files.
+
+```sh
+swift test --package-path Core
+python3 ci/verify_source.py
+swift run --package-path Core CaptureFixture /tmp/observer-fixture
+python3 ci/verify_fixture.py /tmp/observer-fixture
+brew install xcodegen
+xcodegen generate
+xcodebuild build -project Neo2Observer.xcodeproj -scheme Neo2Observer \
+  -sdk iphoneos -configuration Release -derivedDataPath build \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM=""
 ```
 
-実行ファイルがPATHにない場合も標準のWindowsインストール先を探索する。`VIDEO_FFMPEG`、`VIDEO_FFPROBE`、`VOICEVOX_ENGINE`、`VOICEVOX_URL`で接続先を指定できる。既定のVOICEVOXは`http://127.0.0.1:50021`。
+Xcode is needed for the iPhone build; a hosted macOS CI runner can provide it.
+The owner does not need to own a Mac. Windows can be the source/retrieval host
+and a signing host using the owner's chosen signing tool, but signing and its
+host dependencies are a later, separate step. Do not put Apple ID credentials
+in the source or CI. An unsigned IPA is not installable as-is.
 
-## 制作の流れ
+## Before an actual capture
 
-「○○の動画を作って」とCodexへ依頼する。調査・台本・映像方針・声・タイトル・サムネイル案を確認し、承認後に素材取得・音声生成・編集・検査・非公開納品へ進む。「確認不要」で承認待ちを省略できる。
+These are preparation requirements, **not a hardware test request**:
 
-声の指定がなければずんだもん。掛け合いで配役未指定なら、ずんだもんが説明、めたんが視聴者目線の疑問・反論を担当する。声の一覧は`video.py check --voices`で取得する。
+1. Pass the actual iOS compile and Swift fixture checks, retain source commit
+   and artifact hash, then independently verify the source/artifact connection.
+2. Have the owner sign/install the reviewed build. Preserve the existing Apple
+   Devices environment unless a specific approved dependency change is needed.
+3. Prepare one test sheet with current power/cabling, normal radio link,
+   purpose, expected success/refutation/inconclusive outcomes and stop/return.
+   Do not connect aircraft USB during a normal-radio observation.
+4. Establish how closing Fly and opening this same accessory protocol affects
+   session ownership. Do not assume coexistence or normal RC authority.
+5. The first stage sends no application commands. No data must not trigger an
+   automatic retry, handshake, mode/profile change, getter or settings write.
 
-ずんだもん・めたんの声は、一人語りでも発話中だけ固定の立ち絵を表示する。音声スタイルを変更してもキャラは同じ。それ以外の声と発話間の無音では表示しない。位置・サイズは`style.json`の共通設定で決まり、案件ごとに変更しない。
+Stop closes the input stream, unschedules it, releases the session, invalidates
+the timer and flushes/closes the local file on the same main run loop. No worker
+thread or transmit queue exists. Backgrounding, disconnect and read/write
+errors also terminate the observation. IOS process termination/storage failure
+may leave the initial incomplete manifest: the reader must reject that run.
 
-## コマンド
+## Archive format
 
-```powershell
-.\.venv\Scripts\python.exe tools/video.py check projects/<案件>
-.\.venv\Scripts\python.exe tools/video.py build projects/<案件> --quality preview
-.\.venv\Scripts\python.exe tools/video.py wait projects/<案件> --timeout 55
-.\.venv\Scripts\python.exe tools/video.py inspect projects/<案件> --at 5
-.\.venv\Scripts\python.exe tools/video.py inspect projects/<案件> --at 5 --duration 3
-.\.venv\Scripts\python.exe tools/video.py build projects/<案件> --quality final
-.\.venv\Scripts\python.exe tools/video.py wait projects/<案件>
-.\.venv\Scripts\python.exe tools/video.py deliver projects/<案件>
-```
+Each run creates `Documents/Captures/<random UUID>/capture.n2rx` and
+`manifest.json`. Apple Devices File Sharing / the Files app can retrieve the
+whole folder; two Share buttons also expose the files separately. File sharing
+configuration is prepared but has not been observed on the owner's iPhone.
 
-`build`はバックグラウンド実行。`status`/`wait`は短い状態だけを返す。実行中に同じ案件をbuildしても二重起動しない。中断や失敗後は原因を直して同じbuildを実行する。詳細ログは`work/job.log`にある。
+- Binary magic: ASCII `N2RX0001` (8 bytes).
+- Each record: little-endian UInt64 elapsed nanoseconds, UInt32 byte count,
+  then that exact number of raw input bytes. No prefix/sample truncation.
+- Time is the host monotonic time immediately before the read, not FC
+  generation time. Frames can span records. Duplicate payloads are retained.
+- Maximum RX payload 32 MiB, each read 16 KiB, at most 65,536 records; read
+  starts are limited to 30 seconds. Bounded record overhead is additional.
+- Metadata retains model/firmware and a hash of accessory identity; raw serial
+  is not exported. It does not independently confirm a formal RC-N3 identity.
+- A success manifest requires file flush, file close and transport close.
+  Its counters and zero-TX declaration still require independent verification;
+  they are not proof of radio control, Manual entry, restoration or safety.
 
-音声は本文・声・音声設定・VOICEVOXバージョンで再利用する。映像は毎回全体をレンダーする。プレビューは半分の解像度、完成版は指定解像度。既定は1920×1080、30fps。対応画面比率は16:9と9:16。
+The parent workspace's `tools/ios_rx_capture.py` validates the archive and
+extracts CRC-valid DUML candidates. It retains byte69 without pretending a new
+mobile route proves the target layout. Existing 130/571 runtime tools and
+strict USB/RC OSD decoder allowlists remain unchanged.
 
-## YouTube Shorts
-
-「○○のShortsを作って」と依頼する。構成・編集の共通Skillに加えて [shorts Skill](.agents/skills/shorts/SKILL.md) を使う。通常動画の制作方針と承認手順は共通。
-
-project.jsonに `"video": {"width": 1080, "height": 1920, "fps": 30}` を指定するだけで、同じRemotion・VOICEVOX・CLIを使い、完成版1080×1920、プレビュー540×960を出力する。省略時は従来の1920×1080。縦動画の字幕と立ち絵はstyle.jsonのportraitから共通設定を適用する。
-
-Shortsは完成実尺3分以内に構成する。縦レイアウト自体は長尺でも使用でき、尺で映像を自動カットしない。納品時のShorts分類はYouTube側が行う。thumbnail.jpgは通常1080×1920で作り、既存のサムネイルAPI結果まで確認する。
-
-## 入力形式
-
-案件は`projects/<日付>-<slug>/`に置く。`project.json`が台本・編集指定の正本。旧形式の読み込みや自動移行は行わない。
-
-```json
-{
-  "title": "往復の平均速度は、なぜ45キロではない？",
-  "voices": {"zunda": {"style_id": 3}, "metan": {"style_id": 2}},
-  "thumbnail": {"concept": "平均の意外性", "text": "45じゃない！"},
-  "beats": [{
-    "id": "question",
-    "lines": [
-      {"id": "q1", "voice": "zunda", "text": "行きは時速六十キロ。帰りは三十キロなのだ。", "gap": 0.3},
-      {"id": "q2", "voice": "metan", "text": "平均は四十五キロ、じゃないの？", "gap": 0.6}
-    ],
-    "visuals": [
-      {"kind": "media", "path": "assets/outbound.mp4", "to": {"line": "q2"}},
-      {"kind": "media", "path": "assets/return.jpg", "from": {"line": "q2"}}
-    ]
-  }]
-}
-```
-
-- `voices`省略時は`narrator: {style_id: 3}`。1音声なら発話の`voice`を省略できる。複数音声では各発話に指定する。
-- `voices.<名前>.settings`と発話の`settings`はVOICEVOX AudioQueryの数値設定。共通設定→声設定→発話設定の順に適用する。例：`{"speedScale": 1.05, "intonationScale": 1.1}`。
-- beatと発話の`id`は全体で一意の英数字・ハイフン・下線。台詞の修正時にIDを変える必要はない。
-- `gap`は発話後の無音秒数。既定0.3秒。beatの尺は音声実尺＋間から確定する。`duration`を指定すれば余韻を延長でき、無言のbeatでは必須。
-- `from`/`to`はbeat先頭からの秒数、または`{"line":"q2","edge":"end","offset":0.2}`。edgeはstart/end、offsetは秒数。参照できるのは同じbeatの発話。from省略はbeat先頭、to省略はbeat末尾。
-- 全文字幕は発話本文から自動生成する。改行と表示区間の分割だけを変え、字幕原稿を別に書かない。長いセリフは字幕と理解のため短い発話へ分ける。
-- `video`でwidth/height/fps、`delivery.filename`でMP4名を指定できる。未指定ファイル名はタイトルから生成する。
-
-### 映像
-
-visualsの順序が重なり順。表示時間内の要素だけを描画する。画像・動画は横1920×1080、縦1080×1920全面を基準にcoverで表示し、字幕と立ち絵はその上へ重ねる。
-
-| kind | 指定 |
-|---|---|
-| media | `path`、任意の`source_start`（秒）、`fit: contain/cover`（既定cover）。動画音声はミュート。短い動画は自動ループしない |
-
-### 音
-
-beatの`audio`に素材と区間を指定する。
-
-```json
-{"path":"assets/music.wav","volume":0.12,"loop":true,"duck":true,"fade_in":0.5,"fade_out":0.8}
-```
-
-from/toは映像と同じ。`source_start`、`fade_in`、`fade_out`は秒。`volume`は倍率。`loop`と`duck`は省略時false。duckは発話前後に滑らかにBGMを下げ、無音時に戻す。SEは必要な短い区間だけ置く。音の配置とミックスはRemotionが担当する。FFmpegは素材変換・ラウドネス補正・検査に使う。完成ミックスは約−16 LUFS、true peak −1.5 dBを目標に補正し、映像ストリームはコピーする。映像の再描画・別系統の音声ミックスは行わない。
-
-## 保存するもの
-
-- `project.json`、使用素材、必要な調査メモ
-- `output/<タイトル>.mp4`、`output/thumbnail.jpg`
-- `output/final-validation.json`、納品時の`output/youtube-upload.json`
-
-`work/`は発話音声・AudioQuery・時間表・バンドル・ジョブ状態などの再生成可能な作業データ。編集は上記のソースを直し、再buildする。OTIO、ASS、Kdenliveプロジェクトは作らない。
-
-サムネイルは既存の画像生成・画像処理ツールで作り、横は幅640px以上・16:9、縦は高さ640px以上・9:16のJPEGを保存する。エンジン専用のサムネイル描画基盤は持たない。
-
-## 非公開納品
-
-認証情報はリポジトリ外、トークンはWindows DPAPIで保護する。既存の認証を継続利用できる。
-
-```powershell
-.\.venv\Scripts\python.exe tools/upload_youtube.py --install-client-secrets "<OAuthクライアントJSON>" --auth-only
-```
-
-deliverは現在の台本・完成動画と検証記録の一致、サムネイルを確認する。動画本体が同じなら再投稿せず、変更されたサムネイルだけを設定する。YouTubeのprivateとprocessingStatus=succeeded、サムネイルAPI成功を確認して納品完了とする。
-
-## 検証とバックアップ
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -q
-Push-Location remotion
-npm.cmd run typecheck
-npm.cmd test
-Pop-Location
-```
-
-テストに加えて実動画をレンダーし、必要なフレームと短い区間で読みやすさ・同期・説明との一致を確認する。素材の権利台帳や視聴分析は制作必須条件にしない。
-
-システム変更だけを検証後にmainへコミットし、origin/mainへpushする。`projects/`、生成素材、認証情報はGit管理しない。
+Current objective remains stock Manual use on Neo 2 + RC-N3, including input,
+return and stock protection. This observer is only preparation to obtain
+missing evidence for that objective. No motor, flight or firmware operation is
+authorised or implemented by this source package.

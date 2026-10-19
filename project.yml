@@ -1,0 +1,32 @@
+name: Neo2Observer
+options:
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  ObserverCore:
+    path: Core
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    OBSERVER_SOURCE_COMMIT: "unverified-local-source"
+targets:
+  Neo2Observer:
+    type: application
+    platform: iOS
+    sources: [ObserverApp]
+    dependencies:
+      - package: ObserverCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.neo2.rxobserver
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_FILE: ObserverApp/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+schemes:
+  Neo2Observer:
+    build:
+      targets:
+        Neo2Observer: all
